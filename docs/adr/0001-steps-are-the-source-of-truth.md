@@ -1,0 +1,3 @@
+# Steps are the source of truth; the Script is always generated
+
+We store a Test's Steps (plus name and Starting URL) and always generate the e2e Script from them with `compile()`. PROMPT.md originally called the script the source of truth, but its rule "parse a saved script, then re-compile to normalize it" already threw away anything that wasn't a Step, so the Steps were the truth in practice. We made that explicit. A free-form script sent via `save_test_script` is an *import*: it's parsed into Steps, and any statement that can't become a Step is rejected with an error the agent can act on, never silently dropped.
