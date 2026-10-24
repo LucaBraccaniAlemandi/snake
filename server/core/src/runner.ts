@@ -77,7 +77,8 @@ async function execute(test: Test, runId: string): Promise<RunSummary> {
   try {
     const proc = Bun.spawn(
       [E2E_BIN, "run", `tests/${test.id}.e2e.ts`, "--reporter", "json", "--output", output, "--cache-dir", `.cache/${test.id}`, ...(process.env.HEADED === "1" ? ["--headed"] : [])],
-      { cwd: RUNNER_DIR, env: { ...process.env, E2E_TELEMETRY_DISABLED: "1", APP_URL: test.url, CI: "" }, stdout: "pipe", stderr: "pipe", timeout: RUN_TIMEOUT_MS },
+      // Target configuration disallows fragments; app.open in the generated script retains the full URL.
+      { cwd: RUNNER_DIR, env: { ...process.env, E2E_TELEMETRY_DISABLED: "1", APP_URL: test.url.split("#")[0], CI: "" }, stdout: "pipe", stderr: "pipe", timeout: RUN_TIMEOUT_MS },
     );
     [stdout, stderr, exitCode] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
   } catch (error) { stderr += String(error); }
