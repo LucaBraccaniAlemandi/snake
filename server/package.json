@@ -1,0 +1,16 @@
+{
+  "name": "agent-tester-server",
+  "private": true,
+  "workspaces": ["api", "mcp", "core", "demo-shop"],
+  "scripts": {
+    "dev": "concurrently -n api,mcp,shop -c green,magenta,yellow \"bun run --cwd api dev\" \"bun run --cwd mcp dev\" \"bun run --cwd demo-shop dev\"",
+    "mcp:stdio": "bun mcp/src/stdio.ts",
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "bun-types": "^1.4.4",
+    "concurrently": "^10.0.6",
+    "typescript": "^7.0.2"
+  }
+}

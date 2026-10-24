@@ -2,36 +2,39 @@
 
 Chat-driven agentic e2e tests. The full spec is in [PROMPT.md](./PROMPT.md).
 
-## Setup
+Two independent projects, each with its own `package.json`, lockfile and `node_modules`.
 
-Requires Bun ≥ 1.4 and Node ≥ 24 (Node is used later to run the e2e/Playwright tests).
+## client/ (frontend)
+
+React + Vite + Tailwind. Dev server on :5173, which proxies `/api` and `/artifacts` to the server on :3000.
 
 ```sh
+cd client
+bun install
+bun run dev
+```
+
+- Routes: `/` lists tests (`src/routes/TestsPage.tsx`). `/tests/:id` has the chat on the left and Steps | Code | Runs tabs on the right (`src/routes/TestPage.tsx`).
+- API types and the full route list are in `src/types.ts`. The backend isn't built yet, so mock responses with these types until it is.
+
+## server/ (backend)
+
+Bun workspace. Requires Bun ≥ 1.4 and Node ≥ 24 (Node runs the e2e/Playwright tests).
+
+```sh
+cd server
 bun install
 cp .env.example .env
-bun run dev          # everything: client :5173, api :3000, mcp :3001, demo-shop :3002
-bun run dev:client   # frontend only
-bun run dev:server   # backend only (api, mcp, demo-shop)
+bun run dev        # api :3000, mcp :3001, demo-shop :3002
 ```
 
-## Layout
-
 ```
-client/            React + Vite + Tailwind SPA (proxies /api and /artifacts to :3000)
-server/api/        Bun + Hono backend: REST, chat, SSE, runner   (stub: /api/health)
-server/mcp/        MCP server, thin REST client of server/api    (stub)
-server/core/       compile/parse, storage, runner (used by api)  (stub)
-server/demo-shop/  static demo target                            (stub)
-shared/            zod schemas + REST/SSE contract, used by client and server
+server/api/        Hono backend: REST, chat, SSE, runner   (stub: /api/health)
+server/mcp/        MCP server, thin REST client of api     (stub)
+server/core/       zod schemas + REST contract, compile/parse, storage, runner
+server/demo-shop/  static demo target                      (stub)
 ```
 
-PROMPT.md still uses the old names: `apps/web` is now `client/`, `apps/server` is now `server/api/`, and `packages/*` and the other `apps/*` now live under `server/`. The one exception is `packages/shared`, which is now `shared/`.
+The REST/SSE types live in `server/core/src/schema.ts` and `api.ts`, and `client/src/types.ts` mirrors them. **Keep the two in sync by hand.**
 
-## Frontend start guide
-
-Work in `client/`. The contract the UI codes against is in `shared/src/`:
-
-- `schema.ts` defines `Test`, `Step`, `Run`, `StepResult` and `RunSummary`
-- `api.ts` lists every REST route with its request body and `TestEvent`, the SSE event union for `/api/tests/:id/events`
-
-Import from `@agent-tester/shared`. The backend isn't built yet, so mock responses with these types until it is. Routes are `/` (tests list, see `client/src/routes/TestsPage.tsx`) and `/tests/:id` (chat on the left; Steps | Code | Runs tabs on the right; see `client/src/routes/TestPage.tsx`).
+PROMPT.md still uses the old layout: `apps/web` is now `client/`, and the other `apps/*` and `packages/*` now live under `server/`. Notes on the real e2e API are in [docs/e2e-api-notes.md](./docs/e2e-api-notes.md).

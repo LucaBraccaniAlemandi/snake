@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Step, type Run, type RunStatus, type StepStatus, type Test } from "./schema";
 
-// REST contract between client, server/mcp and server/api.
+// REST contract served by api, consumed by mcp and the client (client/src/types.ts mirrors it).
 // GET    /api/tests                   -> TestListItem[]
 // POST   /api/tests                   CreateTestBody -> Test
 // GET    /api/tests/:id               -> Test

@@ -8,7 +8,6 @@
   },
   "dependencies": {
     "@agent-tester/core": "workspace:*",
-    "@agent-tester/shared": "workspace:*",
     "hono": "^4.13.13"
   }
 }
