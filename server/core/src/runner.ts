@@ -59,7 +59,7 @@ async function execute(test: Test, runId: string): Promise<RunSummary> {
   let stderr = "";
   try {
     const proc = Bun.spawn(
-      [E2E_BIN, "run", `tests/${test.id}.e2e.ts`, "--reporter", "json", "--output", output, "--cache-dir", `.cache/${test.id}`],
+      [E2E_BIN, "run", `tests/${test.id}.e2e.ts`, "--reporter", "json", "--output", output, "--cache-dir", `.cache/${test.id}`, ...(process.env.HEADED === "1" ? ["--headed"] : [])],
       {
         cwd: RUNNER_DIR,
         env: { ...process.env, E2E_TELEMETRY_DISABLED: "1", APP_URL: test.url, CI: "" },
