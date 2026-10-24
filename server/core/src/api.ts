@@ -22,7 +22,11 @@ import { Step, type Run, type RunStatus, type StepStatus, type Test } from "./sc
 export const WorkspaceBody = z.object({ name: z.string().min(1) });
 export type WorkspaceBody = z.infer<typeof WorkspaceBody>;
 
-export const CreateTestBody = z.object({ name: z.string().min(1), url: z.string().url() });
+export const TestMetadata = z.object({
+  key: z.string().optional(), componentId: z.string().optional(), status: z.string().optional(), priority: z.string().optional(),
+  preconditions: z.string().optional(), jiraId: z.string().optional(), testType: z.string().optional(), release: z.string().optional(), notes: z.string().optional(),
+});
+export const CreateTestBody = z.object({ name: z.string().min(1), url: z.string().url(), metadata: TestMetadata.optional() });
 export type CreateTestBody = z.infer<typeof CreateTestBody>;
 
 // id may be omitted for new steps; the server assigns one.
@@ -35,6 +39,8 @@ export const EditStepBody = z.object({
   afterId: z.string().nullable().optional(), // omitted = end, null = start (add/move)
 });
 export type EditStepBody = z.infer<typeof EditStepBody>;
+
+export const UpdateTestBody = z.object({ name: z.string().min(1).optional(), url: z.string().url().optional(), metadata: TestMetadata.partial().optional() });
 
 export type ApiError = { error: string };
 

@@ -8,7 +8,9 @@ import {
   EditStepBody,
   NotFound,
   PutStepsBody,
+  UpdateTestBody,
   WorkspaceBody,
+  DEFAULT_WORKSPACE_ID,
   createTest,
   createWorkspace,
   deleteTest,
@@ -16,10 +18,12 @@ import {
   editStep,
   getRun,
   getTest,
+  listRuns,
   listTests,
   listWorkspaces,
   migrate,
   renameWorkspace,
+  sql,
   setSteps,
   startRun,
   subscribe,
@@ -41,7 +45,10 @@ app.onError((err, c) => {
   return c.json({ error: "Internal error" }, 500);
 });
 
-app.get("/api/health", (c) => c.json({ ok: true }));
+app.get("/api/health", async (c) => {
+  try { await sql`SELECT 1`; return c.json({ ok: true, database: "connected" }); }
+  catch { return c.json({ ok: false, database: "unavailable" }, 503); }
+});
 
 app.get("/api/workspaces", async (c) => c.json(await listWorkspaces()));
 app.post("/api/workspaces", async (c) => c.json(await createWorkspace(WorkspaceBody.parse(await c.req.json()).name), 201));
@@ -57,9 +64,12 @@ app.post("/api/workspaces/:wid/tests", async (c) =>
   c.json(await createTest(c.req.param("wid"), CreateTestBody.parse(await c.req.json())), 201),
 );
 
+// Compatibility endpoints keep the existing client and MCP integrations on the Default workspace.
+app.get("/api/tests", async (c) => c.json(await listTests(DEFAULT_WORKSPACE_ID)));
+app.post("/api/tests", async (c) => c.json(await createTest(DEFAULT_WORKSPACE_ID, CreateTestBody.parse(await c.req.json())), 201));
 app.get("/api/tests/:id", async (c) => c.json(await getTest(c.req.param("id"))));
 app.patch("/api/tests/:id", async (c) =>
-  c.json(await updateTest(c.req.param("id"), CreateTestBody.partial().parse(await c.req.json()), "web")),
+  c.json(await updateTest(c.req.param("id"), UpdateTestBody.parse(await c.req.json()), "web")),
 );
 app.delete("/api/tests/:id", async (c) => {
   await deleteTest(c.req.param("id"));
@@ -83,6 +93,8 @@ app.post("/api/tests/:id/run", async (c) => {
   return c.json({ runId }, 202);
 });
 app.post("/api/chat", async (c) => chat(await c.req.json()));
+app.get("/api/tests/:id/runs", async (c) => c.json(await listRuns(c.req.param("id"))));
+app.get("/api/runs", async (c) => c.json(await listRuns()));
 app.get("/api/runs/:runId", async (c) => c.json(await getRun(c.req.param("runId"))));
 app.use("/artifacts/*", serveStatic({ root: `${DATA_DIR}/runs`, rewriteRequestPath: (p) => p.replace(/^\/artifacts/, "") }));
 

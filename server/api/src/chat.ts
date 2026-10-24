@@ -21,11 +21,11 @@ ${steps}`;
 function tools(testId: string) {
   const summarize = (t: Test) => t.steps.map((s, i) => `${i + 1}. [${s.id}] ${s.type}: ${s.text}`).join("\n") || "(no steps)";
   return {
-    get_test: tool({ ...meta("get_test"), execute: () => getTest(testId) }),
+    get_test: tool({ ...meta("get_test"), execute: async () => getTest(testId) }),
     set_steps: tool({ ...meta("set_steps"), execute: async ({ steps }) => summarize(await setSteps(testId, steps, "chat")) }),
     edit_step: tool({ ...meta("edit_step"), execute: async (edit) => summarize(await editStep(testId, edit, "chat")) }),
     run_test: tool({ ...meta("run_test"), execute: async () => (await startRun(testId)).done }),
-    get_run: tool({ ...meta("get_run"), execute: ({ runId }) => getRun(runId) }),
+    get_run: tool({ ...meta("get_run"), execute: async ({ runId }) => getRun(runId) }),
   };
 }
 
