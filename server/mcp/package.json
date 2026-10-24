@@ -5,5 +5,10 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agent-tester/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
   }
 }

@@ -19,22 +19,33 @@ bun run dev
 
 ## server/ (backend)
 
-Bun workspace. Requires Bun ≥ 1.4 and Node ≥ 24 (Node runs the e2e/Playwright tests).
+Bun workspace. Requires Bun ≥ 1.4 and Node ≥ 24.8 (Node runs the e2e/Playwright tests).
 
 ```sh
 cd server
 bun install
-cp .env.example .env
-bun run dev        # api :3000, mcp :3001, demo-shop :3002
+cp .env.example .env    # set ANTHROPIC_API_KEY
+bun run dev             # api :3000, demo-shop :3002
 ```
 
 ```
-server/api/        Hono backend: REST, chat, SSE, runner   (stub: /api/health)
-server/mcp/        MCP server, thin REST client of api     (stub)
-server/core/       zod schemas + REST contract, compile/parse, storage, runner
-server/demo-shop/  static demo target                      (stub)
+server/api/        Hono backend: REST, SSE, chat (/api/chat), runs, /artifacts
+server/core/       zod schemas + REST contract, compile, SQLite storage, runner, tool definitions
+server/runner/     the e2e project every Run executes in (e2e@0.21.3, @e2e-dev/web@0.15.3)
+server/mcp/        MCP stdio server, thin REST client of api
+server/demo-shop/  demo target on :3002 (coupon field hidden behind "Have a code?")
 ```
 
-The REST/SSE types live in `server/core/src/schema.ts` and `api.ts`, and `client/src/types.ts` mirrors them. **Keep the two in sync by hand.**
+The full route list is at the top of `server/core/src/api.ts`. The REST/SSE types live in `server/core/src/schema.ts` and `api.ts`, and `client/src/types.ts` mirrors them. **Keep the two in sync by hand.**
+
+### MCP (Claude Code)
+
+`.mcp.json` at the repo root registers the stdio server, so open Claude Code in this repo with the API running. To add it to Claude Code manually:
+
+```sh
+claude mcp add agent-tester -e SERVER_URL=http://localhost:3000 -e WEB_URL=http://localhost:5173 -- bun server/mcp/src/stdio.ts
+```
+
+Tools: `list_tests`, `create_test`, `get_test`, `set_steps`, `edit_step`, `run_test` and `get_run`. Edits made over MCP show up live in the web UI.
 
 PROMPT.md still uses the old layout: `apps/web` is now `client/`, and the other `apps/*` and `packages/*` now live under `server/`. Notes on the real e2e API are in [docs/e2e-api-notes.md](./docs/e2e-api-notes.md).
