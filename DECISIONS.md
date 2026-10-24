@@ -2,7 +2,12 @@
 
 Small choices made while building. Big ones are in `docs/adr/`, terms in `GLOSSARY.md`.
 
-- **Time budget:** 24 hours. If time runs short, cut in this order: deploy → MCP HTTP transport (keep stdio) → Runs history endpoint → `/api/docs/e2e` and `/api/inspect`. The loop chat → steps → run → fix is never cut.
+- **Time budget:** 3 hours (revised down from 24). The loop chat → steps → run → fix is never cut. Cut for this budget:
+  - **No script parser** (no `save_test_script`, `PUT /script` or ts-morph). The chat edits Steps directly with `edit_step`/`set_steps`.
+  - **No live per-step status.** `e2e run --reporter json`, with all Step Results arriving when the Run ends. This supersedes the onEvent plan in ADR-0002.
+  - **Chat history lives only in the browser**, not in SQLite.
+  - **Not built:** deploy, MCP HTTP transport, `/api/inspect`, `/api/docs/e2e`, runs history endpoint, `ACCESS_TOKEN`. MCP stdio is a stretch goal.
+  - **Build order:** tests CRUD + SSE → runner → chat → (MCP stdio). `client/` is owned by the partner and the backend never edits it.
 - **Repo layout:** `client/` and `server/` are independent projects. The API types are duplicated in `server/core/src/{schema,api}.ts` and `client/src/types.ts`, kept in sync by hand.
 - **Starting URL:** a field on the Test, compiled to `await app.open(url)`. It's never a Step.
 - **Expectations:** only "text is visible" (`expect(screen.getByText(value)).toBeVisible()`) and "URL contains" (`target: "url"`, `expect(browser).toHaveURL(...)`).
