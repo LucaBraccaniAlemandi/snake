@@ -26,9 +26,10 @@ Después de una ejecución failed, revisa el paso y el error, explica la causa e
 ${context}`;
 }
 function resultText(result: McpResult) {
-  if (!("content" in result)) return JSON.stringify(result.toolResult);
-  const text = result.content.filter((part) => part.type === "text").map((part) => part.text).join("\n");
-  if (result.isError) throw new Error(text || "La herramienta MCP falló");
+  const value = result as { content?: { type: string; text?: string }[]; isError?: boolean; toolResult?: unknown };
+  if (!value.content) return JSON.stringify(value.toolResult);
+  const text = value.content.filter((part) => part.type === "text" && typeof part.text === "string").map((part) => part.text).join("\n");
+  if (value.isError) throw new Error(text || "La herramienta MCP falló");
   return text;
 }
 

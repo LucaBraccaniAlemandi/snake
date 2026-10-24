@@ -24,6 +24,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [storageError, setStorageError] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const pendingEdits = useRef(new Map<string, Partial<TestCase>>());
+  const saves = useRef(new Map<string, Promise<void>>());
   const dataRef = useRef(data);
   const notify = useCallback((message: string) => { clearTimeout(toastTimer.current); setToast(message); toastTimer.current = setTimeout(() => setToast(""), 4000); }, []);
 
@@ -54,6 +56,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           const payload = JSON.parse(event.data) as { type: string; test?: Parameters<typeof fromTest>[0]; run?: Parameters<typeof toRun>[0] };
           if (payload.type === "test-updated" && payload.test) {
             const test = fromTest(payload.test);
+            if (pendingEdits.current.has(test.id) || saves.current.has(test.id)) return;
             setData((d) => ({ ...d, cases: d.cases.map((old) => old.id === test.id ? test : old) }));
           }
           if ((payload.type === "run-started" || payload.type === "run-finished") && payload.run) {
@@ -86,22 +89,35 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => { stopped = true; clearInterval(timer); };
   }, [runningIds]);
 
+  const flushCase = useCallback(async (id: string) => {
+    clearTimeout(saveTimers.current.get(id));
+    saveTimers.current.delete(id);
+    await saves.current.get(id);
+    const patch = pendingEdits.current.get(id);
+    if (!patch) return;
+    pendingEdits.current.delete(id);
+    const save = (async () => {
+      try {
+        const saved = fromTest(await api.updateTest(id, patch));
+        setData((d) => ({ ...d, cases: d.cases.map((candidate) => candidate.id === id ? { ...saved, ...pendingEdits.current.get(id) } : candidate) }));
+        setStorageError("");
+      } catch (error) {
+        pendingEdits.current.set(id, { ...patch, ...pendingEdits.current.get(id) });
+        setStorageError(`No se guardaron los cambios: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+      }
+    })();
+    saves.current.set(id, save);
+    try { await save; } finally { saves.current.delete(id); }
+  }, []);
+
   const updateCase = useCallback((id: string, patch: Partial<TestCase>) => {
+    pendingEdits.current.set(id, { ...pendingEdits.current.get(id), ...patch });
     setData((d) => ({ ...d, cases: d.cases.map((test) => test.id === id ? { ...test, ...patch, updatedAt: new Date().toISOString() } : test) }));
     const previous = saveTimers.current.get(id);
     if (previous) clearTimeout(previous);
-    saveTimers.current.set(id, setTimeout(async () => {
-      const test = dataRef.current.cases.find((candidate) => candidate.id === id);
-      if (!test) return;
-      try {
-        let saved = fromTest(await api.updateTest(id, test));
-        if (patch.steps) saved = fromTest(await api.setSteps(id, test.steps));
-        setData((d) => ({ ...d, cases: d.cases.map((candidate) => candidate.id === id ? saved : candidate) }));
-        setStorageError("");
-      } catch (error) { setStorageError(`No se guardaron los cambios: ${error instanceof Error ? error.message : String(error)}`); }
-      finally { saveTimers.current.delete(id); }
-    }, 350));
-  }, []);
+    saveTimers.current.set(id, setTimeout(() => { void flushCase(id).catch(() => undefined); }, 350));
+  }, [flushCase]);
 
   // A ref gives the debounce callback the latest full case rather than a stale render.
   useEffect(() => { dataRef.current = data; }, [data]);
@@ -147,6 +163,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     startingRuns.current.add(testId);
     notify("Iniciando ejecución…");
     try {
+      await flushCase(testId);
       const { runId } = await api.startRun(testId);
       const run = toRun(await api.getRun(runId));
       setData((d) => ({ ...d, runs: [run, ...d.runs.filter((old) => old.id !== run.id)] }));
@@ -155,7 +172,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return runId;
     } catch (error) { notify(`No se pudo iniciar: ${error instanceof Error ? error.message : String(error)}`); return null; }
     finally { startingRuns.current.delete(testId); }
-  }, [notify, navigate]);
+  }, [notify, navigate, flushCase]);
 
   const setWorkspaceData: React.Dispatch<React.SetStateAction<Workspace>> = (action) => {
     const previous = dataRef.current;

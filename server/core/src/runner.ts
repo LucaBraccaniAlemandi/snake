@@ -72,17 +72,18 @@ async function execute(test: Test, runId: string): Promise<RunSummary> {
   writeFileSync(join(RUNNER_DIR, "tests", `${test.id}.e2e.ts`), script);
   const output = `.runs/${runId}`;
   let stderr = "";
+  let stdout = "";
+  let exitCode: number | null = null;
   try {
     const proc = Bun.spawn(
       [E2E_BIN, "run", `tests/${test.id}.e2e.ts`, "--reporter", "json", "--output", output, "--cache-dir", `.cache/${test.id}`, ...(process.env.HEADED === "1" ? ["--headed"] : [])],
-      { cwd: RUNNER_DIR, env: { ...process.env, E2E_TELEMETRY_DISABLED: "1", APP_URL: test.url, CI: "" }, stdout: "ignore", stderr: "pipe", timeout: RUN_TIMEOUT_MS },
+      { cwd: RUNNER_DIR, env: { ...process.env, E2E_TELEMETRY_DISABLED: "1", APP_URL: test.url, CI: "" }, stdout: "pipe", stderr: "pipe", timeout: RUN_TIMEOUT_MS },
     );
-    stderr = await new Response(proc.stderr).text();
-    await proc.exited;
+    [stdout, stderr, exitCode] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
   } catch (error) { stderr += String(error); }
 
   let report: ReturnType<typeof readReport>;
-  try { report = readReport(test, script, join(RUNNER_DIR, output), runId, stderr); }
+  try { report = readReport(test, script, join(RUNNER_DIR, output), runId, stderr, stdout, exitCode); }
   catch (error) { report = { status: "error", stepResults: test.steps.map((step) => ({ stepId: step.id, text: step.text, status: "skipped" })), error: String(error), videos: [] }; }
   const { status, stepResults, error, videos } = report;
   const failed = stepResults.find((result) => result.status === "failed");
@@ -102,11 +103,16 @@ type ReportStep = { status: string; source?: { line: number }; error?: { message
 type ReportArtifact = { kind: string; path: string; mediaType?: string; size?: number; sha256?: string; startedAt?: string };
 type Attempt = { status: string; error?: { message?: string }; artifacts?: ReportArtifact[]; steps: ReportStep[] };
 
-function readReport(test: Test, script: string, outputDir: string, runId: string, stderr: string) {
+function readReport(test: Test, script: string, outputDir: string, runId: string, stderr: string, stdout: string, exitCode: number | null) {
   const fail = (error: string) => ({ status: "error" as RunStatus, stepResults: test.steps.map((step): StepResult => ({ stepId: step.id, text: step.text, status: "skipped" })), error, videos: [] });
   const reportPath = join(outputDir, "report.json");
-  if (!existsSync(reportPath)) return fail(stderr.trim().split("\n").slice(-5).join("\n") || "e2e produced no report");
-  const run = JSON.parse(readFileSync(reportPath, "utf8")).run;
+  // The JSON reporter also emits its report to stdout, including failed assertions.
+  // Never discard it: some CLI exits do not leave report.json on disk.
+  const content = existsSync(reportPath) ? readFileSync(reportPath, "utf8") : stdout.trim();
+  if (!content) return fail(`El runner terminó sin informe (código ${exitCode ?? "desconocido"}). ${stderr.trim().slice(-1500) || "No emitió diagnóstico; puede haber sido interrumpido."}`);
+  let run: any;
+  try { run = JSON.parse(content).run; }
+  catch { return fail(`Informe inválido del runner (código ${exitCode}). ${(stderr || stdout).trim().slice(-1500)}`); }
   const result = run.results.find((item: any) => item.selected);
   const attempt: Attempt | undefined = result?.attempts?.at(-1);
   if (!attempt) return fail(run.errors?.[0]?.message ?? "e2e ran no test");

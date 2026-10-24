@@ -41,7 +41,7 @@ server/demo-shop/  demo target on :3002
 ### Docker
 
 ```sh
-cp server/.env.example server/.env  # set ANTHROPIC_API_KEY for AI features
+cp server/.env.example server/.env  # set API_KEY (or OPENROUTER_API_KEY) for AI features
 docker compose -f server/docker-compose.yml up --build
 ```
 
@@ -58,4 +58,4 @@ docker compose -f server/docker-compose.yml up --build
 
 ### MCP
 
-`server/.mcp.json` registers the stdio server, so open Claude Code in `server/` with the API running. Tools include workspace and test CRUD, step editing, execution, and run inspection.
+`server/.mcp.json` registers the stdio server, so open Claude Code in `server/` with the API running. Tools include workspace and test CRUD, step editing, execution, and run inspection. The web chat connects to this same MCP server to create, edit and execute tests; API keys remain server-side.

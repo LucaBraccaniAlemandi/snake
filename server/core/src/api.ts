@@ -44,7 +44,7 @@ export const EditStepBody = z.object({
 });
 export type EditStepBody = z.infer<typeof EditStepBody>;
 
-export const UpdateTestBody = z.object({ name: z.string().min(1).optional(), url: z.string().url().optional(), metadata: TestMetadata.partial().optional() });
+export const UpdateTestBody = z.object({ name: z.string().min(1).optional(), url: z.string().url().optional(), metadata: TestMetadata.partial().optional(), steps: PutStepsBody.shape.steps.optional() });
 
 const TicketReference = z.string().trim().max(500).nullable().optional();
 export const CreateBugBody = z.object({

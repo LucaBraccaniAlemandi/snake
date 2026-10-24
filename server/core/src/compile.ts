@@ -4,18 +4,19 @@ const s = (v: string) => JSON.stringify(v);
 const escapeRegExp = (v: string) => v.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
 function statement(step: Step): string {
+  const instruction = step.text + (step.data?.trim() ? `\nDatos de entrada: ${step.data.trim()}` : "");
   switch (step.type) {
     case "act":
-      return `await agent.act(${s(step.text)});`;
+      return `await agent.act(${s(instruction)});`;
     case "assert":
-      return `await agent.assert(${s(step.text)});`;
+      return `await agent.assert(${s(instruction)});`;
     case "expect":
       if (step.target === "url") return `await expect(browser).toHaveURL(/${escapeRegExp(step.value ?? step.text)}/);`;
       return `await expect(screen.getByText(${s(step.value ?? step.text)})).toBeVisible();`;
   }
 }
 
-// One statement per Step, each tagged `// step:<id>` so report lines map back to Steps.
+// Every action and its expected-result assertion share the step's source tag.
 // The e2e test title is the testId, which keeps the Replay Cache key stable across renames.
 export function compile(test: { id: string; url: string; steps: Step[] }): string {
   return [
@@ -24,7 +25,10 @@ export function compile(test: { id: string; url: string; steps: Step[] }): strin
     ``,
     `test(${s(test.id)}, async ({ app, browser, agent, screen }) => {`,
     `  await app.open(${s(test.url)});`,
-    ...test.steps.map((step) => `  ${statement(step)} // step:${step.id}`),
+    ...test.steps.flatMap((step) => [
+      `  ${statement(step)} // step:${step.id}`,
+      ...(step.expected?.trim() ? [`  await agent.assert(${s(step.expected.trim())}); // step:${step.id}`] : []),
+    ]),
     `});`,
     ``,
   ].join("\n");

@@ -99,7 +99,7 @@ export function toRun(run: Run & { summary?: Run["summary"] }): DemoRun {
 export const api = {
   listTests: () => request<TestListItem[]>("/api/tests"),
   createTest: (test: Partial<TestCase>) => request<Test>("/api/tests", { method: "POST", body: JSON.stringify({ name: test.name, url: test.url, metadata: metadata(test as TestCase) }) }),
-  updateTest: (id: string, test: Partial<TestCase>) => request<Test>(`/api/tests/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ name: test.name, url: test.url, metadata: metadata(test as TestCase) }) }),
+  updateTest: (id: string, test: Partial<TestCase>) => request<Test>(`/api/tests/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ name: test.name, url: test.url, metadata: metadata(test as TestCase), steps: test.steps }) }),
   deleteTest: (id: string) => request<void>(`/api/tests/${encodeURIComponent(id)}`, { method: "DELETE" }),
   setSteps: (id: string, steps: TestCase["steps"]) => request<Test>(`/api/tests/${encodeURIComponent(id)}/steps`, { method: "PUT", body: JSON.stringify({ steps }) }),
   listRuns: () => request<(Run & { summary?: Run["summary"] })[]>("/api/runs"),

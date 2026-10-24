@@ -44,11 +44,12 @@ export async function createTest(workspaceId: string, input: { name: string; url
   return toTest(row as TestRow);
 }
 
-export async function updateTest(id: string, patch: { name?: string; url?: string; metadata?: Partial<Test["metadata"]> }, source: Source): Promise<Test> {
+export async function updateTest(id: string, patch: { name?: string; url?: string; metadata?: Partial<Test["metadata"]>; steps?: Array<Omit<Step, "id"> & { id?: string }> }, source: Source): Promise<Test> {
   const current = await getTest(id);
   const metadata = { ...current.metadata, ...patch.metadata };
+  const steps = patch.steps?.map((step) => ({ ...step, id: step.id || newId("s") })) ?? current.steps;
   await sql`UPDATE tests SET name = ${patch.name ?? current.name}, url = ${patch.url ?? current.url},
-    metadata = ${JSON.stringify(metadata)}::jsonb, updated_at = now() WHERE id = ${id}`;
+    metadata = ${JSON.stringify(metadata)}::jsonb, steps = ${JSON.stringify(steps)}::jsonb, updated_at = now() WHERE id = ${id}`;
   return broadcast(id, source);
 }
 
