@@ -15,6 +15,7 @@
       "dependencies": {
         "@agent-tester/core": "workspace:*",
         "hono": "^4.13.13",
+        "zod": "^4.6.7",
       },
     },
     "core": {

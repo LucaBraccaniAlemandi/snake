@@ -5,6 +5,8 @@ import { Step, type Run, type RunStatus, type StepStatus, type Test } from "./sc
 // GET    /api/tests                   -> TestListItem[]
 // POST   /api/tests                   CreateTestBody -> Test
 // GET    /api/tests/:id               -> Test
+// PATCH  /api/tests/:id               { name?, url? } -> Test
+// DELETE /api/tests/:id               -> 204
 // PUT    /api/tests/:id/steps         PutStepsBody -> Test
 // POST   /api/tests/:id/steps/edit    EditStepBody -> Test
 // POST   /api/tests/:id/run[?wait=true] -> { runId } | RunSummary
@@ -23,7 +25,7 @@ export type PutStepsBody = z.infer<typeof PutStepsBody>;
 export const EditStepBody = z.object({
   op: z.enum(["add", "update", "delete", "move"]),
   step: Step.partial().extend({ id: z.string().optional() }),
-  afterId: z.string().nullable().optional(),
+  afterId: z.string().nullable().optional(), // omitted = end, null = start (add/move)
 });
 export type EditStepBody = z.infer<typeof EditStepBody>;
 
