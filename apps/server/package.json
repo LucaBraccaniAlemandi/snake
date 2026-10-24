@@ -1,0 +1,14 @@
+{
+  "name": "@agent-tester/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agent-tester/core": "workspace:*",
+    "@agent-tester/shared": "workspace:*",
+    "hono": "^4.13.13"
+  }
+}

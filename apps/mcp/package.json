@@ -1,0 +1,9 @@
+{
+  "name": "@agent-tester/mcp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  }
+}
