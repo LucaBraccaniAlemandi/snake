@@ -10,6 +10,8 @@ export const Step = z.object({
   text: z.string(),
   target: z.string().optional(),
   value: z.string().optional(),
+  data: z.string().optional(),
+  expected: z.string().optional(),
 });
 export type Step = z.infer<typeof Step>;
 
@@ -26,6 +28,17 @@ export const Test = z.object({
   url: z.string().url(),
   script: z.string(),
   steps: z.array(Step),
+  metadata: z.object({
+    key: z.string().optional(),
+    componentId: z.string().optional(),
+    status: z.string().optional(),
+    priority: z.string().optional(),
+    preconditions: z.string().optional(),
+    jiraId: z.string().optional(),
+    testType: z.string().optional(),
+    release: z.string().optional(),
+    notes: z.string().optional(),
+  }).default({}),
   updatedAt: z.string(),
 });
 export type Test = z.infer<typeof Test>;
@@ -34,8 +47,11 @@ export const TestListItem = z.object({
   id: z.string(),
   name: z.string(),
   url: z.string(),
+  script: z.string(),
   lastRunStatus: RunStatus.nullable(),
   updatedAt: z.string(),
+  steps: z.array(Step),
+  metadata: Test.shape.metadata,
 });
 export type TestListItem = z.infer<typeof TestListItem>;
 
@@ -53,7 +69,9 @@ export const Run = z.object({
   status: RunStatus,
   startedAt: z.string().nullable(),
   finishedAt: z.string().nullable(),
+  createdAt: z.string(),
   stepResults: z.array(StepResult),
+  testSnapshot: z.object({ name: z.string(), url: z.string(), steps: z.array(Step), metadata: Test.shape.metadata }),
   reportPath: z.string().optional(),
 });
 export type Run = z.infer<typeof Run>;

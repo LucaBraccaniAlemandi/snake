@@ -1,6 +1,8 @@
 node_modules/
 dist/
 data/
+!client/src/data/
+!client/src/data/**
 .env
 .env.local
 .e2e/

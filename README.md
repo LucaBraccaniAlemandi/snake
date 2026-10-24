@@ -14,8 +14,8 @@ bun install
 bun run dev
 ```
 
-- Routes: `/` lists tests (`src/routes/TestsPage.tsx`). `/tests/:id` has the chat on the left and Steps | Code | Runs tabs on the right (`src/routes/TestPage.tsx`).
-- API types and the full route list are in `src/types.ts`. The backend isn't built yet, so mock responses with these types until it is.
+- The workspace UI is in `src/routes/WorkspacePages.tsx`; cases and runs load from the API. Editing, deletion and execution are persisted by the backend.
+- The Vite dev server proxies `/api` and `/artifacts` to the API at :3000.
 
 ## server/ (backend)
 
@@ -25,18 +25,19 @@ Bun workspace. Requires Bun ≥ 1.4 and Node ≥ 24.8 (Node runs the e2e/Playwri
 cd server
 bun install
 cp .env.example .env    # set ANTHROPIC_API_KEY
+docker compose up -d db # PostgreSQL :5432
 bun run dev             # api :3000, demo-shop :3002
 ```
 
 ```
 server/api/        Hono backend: REST, SSE, chat (/api/chat), runs, /artifacts
-server/core/       zod schemas + REST contract, compile, SQLite storage, runner, tool definitions
+server/core/       zod schemas + REST contract, compile, PostgreSQL storage, runner, tool definitions
 server/runner/     the e2e project every Run executes in (e2e@0.21.3, @e2e-dev/web@0.15.3)
 server/mcp/        MCP stdio server, thin REST client of api
 server/demo-shop/  demo target on :3002 (coupon field hidden behind "Have a code?")
 ```
 
-The full route list is at the top of `server/core/src/api.ts`. The REST/SSE types live in `server/core/src/schema.ts` and `api.ts`, and `client/src/types.ts` mirrors them. **Keep the two in sync by hand.**
+The API applies the versioned initial schema automatically when it starts. Set `DATABASE_URL` to connect to a local PostgreSQL instance; the example uses `agent:agent` for local development. The full route list is at the top of `server/core/src/api.ts`.
 
 ### Docker
 
@@ -47,8 +48,8 @@ docker compose up -d --build  # api :3000, demo shop :3002, postgres on 127.0.0.
 ```
 
 - **Image:** `server/Dockerfile` builds on `node:24` and adds Bun and the Chromium headless shell at the exact version `@e2e-dev/web` pins.
-- **Volumes:** `server-data` holds the SQLite database and screenshots, and `replay-cache` holds e2e's Replay Cache.
-- **Postgres:** the service is already in `server/docker-compose.yml`, with `DATABASE_URL` passed to the server, but the server doesn't use it yet. It still stores everything in SQLite.
+- **Volumes:** `server-data` holds screenshots and artifacts, `replay-cache` holds e2e's Replay Cache, and `pg-data` persists PostgreSQL.
+- **Postgres:** the API uses `DATABASE_URL` and runs its initial schema migration on startup. Set `POSTGRES_PASSWORD` in `.env` for deployments beyond local development.
 - **Reachable URLs:** tests run inside the container, so a Starting URL must be reachable from there. `http://localhost:3002` (the demo shop in the same container) and public URLs work. Your host's `localhost` apps don't.
 
 ### MCP (Claude Code)

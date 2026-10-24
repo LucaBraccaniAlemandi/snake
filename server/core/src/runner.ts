@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { compile, stepLines } from "./compile";
-import { DATA_DIR, db, newId } from "./db";
+import { DATA_DIR, db, newId, ready } from "./db";
 import { publish } from "./events";
 import type { Run, RunStatus, RunSummary, StepResult, StepStatus, Test } from "./schema";
 import { NotFound, getTest } from "./tests";
@@ -12,35 +12,48 @@ const RUN_TIMEOUT_MS = 5 * 60_000;
 
 type RunRow = {
   id: string; test_id: string; status: RunStatus; started_at: string | null; finished_at: string | null;
-  step_results: string; summary: string | null;
+  created_at: Date | string;
+  step_results: StepResult[] | string; summary: RunSummary | string | null; test_snapshot: { name: string; url: string; steps: Test["steps"]; metadata: Test["metadata"] } | string;
 };
 
+const parseJson = <T>(value: T | string): T => typeof value === "string" ? JSON.parse(value) as T : value;
 const toRun = (r: RunRow): Run => ({
-  id: r.id, testId: r.test_id, status: r.status, startedAt: r.started_at, finishedAt: r.finished_at,
-  stepResults: JSON.parse(r.step_results),
+  id: r.id, testId: r.test_id, status: r.status, startedAt: r.started_at ? new Date(r.started_at).toISOString() : null, finishedAt: r.finished_at ? new Date(r.finished_at).toISOString() : null,
+  createdAt: new Date(r.created_at).toISOString(),
+  stepResults: parseJson(r.step_results), testSnapshot: parseJson(r.test_snapshot),
 });
 
-export function getRun(runId: string): Run & { summary: RunSummary | null } {
-  const row = db.query("SELECT * FROM runs WHERE id = ?").get(runId) as RunRow | null;
+export async function getRun(runId: string): Promise<Run & { summary: RunSummary | null }> {
+  await ready;
+  const [row] = await db<RunRow[]>`SELECT * FROM runs WHERE id = ${runId}`;
   if (!row) throw new NotFound(`Run ${runId} not found`);
-  return { ...toRun(row), summary: row.summary ? JSON.parse(row.summary) : null };
+  return { ...toRun(row), summary: row.summary ? parseJson(row.summary) : null };
+}
+
+export async function listRuns(testId?: string): Promise<Array<Run & { summary: RunSummary | null }>> {
+  await ready;
+  const rows = testId
+    ? await db<RunRow[]>`SELECT * FROM runs WHERE test_id = ${testId} ORDER BY created_at DESC`
+    : await db<RunRow[]>`SELECT * FROM runs ORDER BY created_at DESC`;
+  return rows.map((row) => ({ ...toRun(row), summary: row.summary ? parseJson(row.summary) : null }));
 }
 
 // One Run at a time; a Test that is already queued or running gets its existing Run back.
 let queue: Promise<unknown> = Promise.resolve();
 const active = new Map<string, { runId: string; done: Promise<RunSummary> }>();
 
-export function startRun(testId: string): { runId: string; done: Promise<RunSummary> } {
+export async function startRun(testId: string): Promise<{ runId: string; done: Promise<RunSummary> }> {
+  await ready;
   const existing = active.get(testId);
   if (existing) return existing;
 
-  const test = getTest(testId); // snapshot: later edits don't affect this Run
+  const test = await getTest(testId); // snapshot: later edits don't affect this Run
   const runId = newId("r");
   const pending: StepResult[] = test.steps.map((s) => ({ stepId: s.id, status: "pending" }));
-  db.query("INSERT INTO runs (id, test_id, status, step_results, created_at) VALUES (?, ?, 'queued', ?, ?)")
-    .run(runId, testId, JSON.stringify(pending), new Date().toISOString());
+  const snapshot = { name: test.name, url: test.url, steps: test.steps, metadata: test.metadata };
+  await db`INSERT INTO runs (id, test_id, status, step_results, test_snapshot) VALUES (${runId}, ${testId}, 'queued', ${db.json(pending)}, ${db.json(snapshot)})`;
 
-  const done = (queue = queue.then(() => execute(test, runId)).finally(() => active.delete(testId))) as Promise<RunSummary>;
+  const done = (queue = queue.catch(() => undefined).then(() => execute(test, runId)).finally(() => active.delete(testId))) as Promise<RunSummary>;
   done.catch((err) => console.error(`Run ${runId} crashed`, err));
   const entry = { runId, done };
   active.set(testId, entry);
@@ -49,10 +62,12 @@ export function startRun(testId: string): { runId: string; done: Promise<RunSumm
 
 async function execute(test: Test, runId: string): Promise<RunSummary> {
   const startedAt = new Date().toISOString();
-  db.query("UPDATE runs SET status = 'running', started_at = ? WHERE id = ?").run(startedAt, runId);
-  publish(test.id, { type: "run-started", run: toRun(db.query("SELECT * FROM runs WHERE id = ?").get(runId) as RunRow) });
+  await db`UPDATE runs SET status = 'running', started_at = ${startedAt} WHERE id = ${runId}`;
+  const [runningRow] = await db<RunRow[]>`SELECT * FROM runs WHERE id = ${runId}`;
+  publish(test.id, { type: "run-started", run: toRun(runningRow!) });
 
   const script = compile(test);
+  mkdirSync(join(RUNNER_DIR, "tests"), { recursive: true });
   writeFileSync(join(RUNNER_DIR, "tests", `${test.id}.e2e.ts`), script);
   const output = `.runs/${runId}`;
 
@@ -74,7 +89,11 @@ async function execute(test: Test, runId: string): Promise<RunSummary> {
     stderr += String(err);
   }
 
-  const { status, stepResults, error } = readReport(test, script, join(RUNNER_DIR, output), runId, stderr);
+  const report = (() => {
+    try { return readReport(test, script, join(RUNNER_DIR, output), runId, stderr); }
+    catch (err) { return { status: "error" as RunStatus, stepResults: test.steps.map((step): StepResult => ({ stepId: step.id, status: "skipped" })), error: String(err) }; }
+  })();
+  const { status, stepResults, error } = report;
   const failed = stepResults.find((r) => r.status === "failed");
   const failedStep = failed ? test.steps.find((s) => s.id === failed.stepId)! : null;
   const summary: RunSummary = {
@@ -86,10 +105,9 @@ async function execute(test: Test, runId: string): Promise<RunSummary> {
     screenshotUrl: failed?.screenshotPath ?? null,
   };
 
-  db.query("UPDATE runs SET status = ?, finished_at = ?, step_results = ?, summary = ? WHERE id = ?")
-    .run(status, new Date().toISOString(), JSON.stringify(stepResults), JSON.stringify(summary), runId);
+  await db`UPDATE runs SET status = ${status}, finished_at = now(), step_results = ${db.json(stepResults)}, summary = ${db.json(summary)} WHERE id = ${runId}`;
   rmSync(join(RUNNER_DIR, output), { recursive: true, force: true });
-  publish(test.id, { type: "run-finished", run: getRun(runId), status });
+  publish(test.id, { type: "run-finished", run: await getRun(runId), status });
   return summary;
 }
 

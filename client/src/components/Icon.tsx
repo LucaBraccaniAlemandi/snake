@@ -1,0 +1,46 @@
+import type { CSSProperties } from "react";
+
+const paths = {
+  flask: "M9 3h6M10 3v7L5 19a1.4 1.4 0 0 0 1.2 2h11.6a1.4 1.4 0 0 0 1.2-2l-5-9V3M8 15h8",
+  dashboard: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z",
+  cases: "M9 5H5v16h14V5h-4M9 3h6v4H9zM8 12h8M8 16h5",
+  play: "m9 5 11 7-11 7V5Z",
+  sparkles: "m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3ZM20 2v4M18 4h4",
+  chat: "M21 11a8 8 0 0 1-8 8H7l-5 3 1-7a8 8 0 0 1-1-4 9 9 0 0 1 19 0ZM7 10h10M7 14h6",
+  settings: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1 1-3Z",
+  chevron: "m9 5 7 7-7 7",
+  down: "m6 9 6 6 6-6",
+  plus: "M12 5v14M5 12h14",
+  search: "M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z",
+  filter: "M3 5h18M6 12h12M10 19h4",
+  check: "m5 12 4 4L19 6",
+  x: "m6 6 12 12M18 6 6 18",
+  arrow: "M5 12h14m-6-6 6 6-6 6",
+  back: "M19 12H5m6-6-6 6 6 6",
+  edit: "m16 3 5 5-12 12-6 1 1-6L16 3ZM13 6l5 5",
+  trash: "M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7",
+  copy: "M8 8h13v13H8zM16 8V3H3v13h5",
+  folder: "M3 7V4h6l2 3h10v14H3V7Z",
+  globe: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM3 12h18M12 3c-5 5-5 13 0 18 5-5 5-13 0-18Z",
+  clock: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM12 7v5l3 2",
+  bug: "M8 8h8v9a4 4 0 0 1-8 0V8ZM9 8V6a3 3 0 0 1 6 0v2M3 9l5 3M21 9l-5 3M3 17l5-2M21 17l-5-2M9 3 7 1M15 3l2-2M12 9v11",
+  code: "m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18",
+  download: "M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5",
+  upload: "M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5",
+  send: "m22 2-7 20-4-9-9-4L22 2ZM11 13 22 2",
+  refresh: "M20 8a8 8 0 1 0 0 8M20 3v5h-5",
+  file: "M14 2H4v20h16V8l-6-6ZM14 2v6h6M8 13h8M8 17h5",
+  menu: "M3 6h18M3 12h18M3 18h18",
+  bell: "M5 17h14l-2-4V9a5 5 0 0 0-10 0v4l-2 4ZM10 21h4",
+  external: "M14 3h7v7M10 14 21 3M10 3H3v18h18v-7",
+  shield: "M12 2 3 6v7c0 5 9 9 9 9s9-4 9-9V6l-9-4Zm-5 10 3 3 6-6",
+  monitor: "M2 3h20v14H2zM8 21h8M12 17v4",
+  link: "m9 15 6-6M9 7l3-3a5 5 0 0 1 7 7l-3 3M15 17l-3 3a5 5 0 0 1-7-7l3-3",
+  stop: "M5 5h14v14H5z",
+  up: "m6 15 6-6 6 6",
+  history: "M3 12a9 9 0 1 0 3-7L2 8M2 3v5h5M12 7v5l3 2",
+} as const;
+export type IconName = keyof typeof paths;
+export function Icon({ name, size = 18, style, className = "" }: { name: IconName; size?: number; style?: CSSProperties; className?: string }) {
+  return <svg className={className} style={style} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
+}

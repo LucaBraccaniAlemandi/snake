@@ -9,7 +9,6 @@ services:
     env_file: .env
     environment:
       DATA_DIR: /data
-      # Not used yet: the server still stores data in SQLite under /data.
       DATABASE_URL: postgres://agent:${POSTGRES_PASSWORD:-agent}@db:5432/agent_tester
     volumes:
       - server-data:/data
@@ -20,7 +19,6 @@ services:
     shm_size: 1gb # Chromium needs more shared memory than Docker's 64MB default
     restart: unless-stopped
 
-  # Ready for the planned move from SQLite to Postgres.
   db:
     image: postgres:17-alpine
     environment:
