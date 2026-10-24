@@ -21,6 +21,7 @@ import {
   type TestEvent,
 } from "@agent-tester/core";
 import { z } from "zod";
+import { chat } from "./chat";
 
 const app = new Hono();
 
@@ -61,6 +62,7 @@ app.post("/api/tests/:id/run", async (c) => {
   if (c.req.query("wait") === "true") return c.json(await done);
   return c.json({ runId }, 202);
 });
+app.post("/api/chat", async (c) => chat(await c.req.json()));
 app.get("/api/runs/:runId", (c) => c.json(getRun(c.req.param("runId"))));
 app.use("/artifacts/*", serveStatic({ root: `${DATA_DIR}/runs`, rewriteRequestPath: (p) => p.replace(/^\/artifacts/, "") }));
 

@@ -77,7 +77,9 @@ export function editStep(id: string, edit: EditStepBody, source: Source): Test {
     }
     case "update": {
       const i = index(edit.step.id);
-      steps[i] = { ...steps[i]!, ...edit.step, id: steps[i]!.id };
+      const next: Step = { ...steps[i]!, ...edit.step, id: steps[i]!.id };
+      if (next.type !== "expect") delete next.target, delete next.value; // only Expectations use them
+      steps[i] = next;
       break;
     }
     case "delete":
