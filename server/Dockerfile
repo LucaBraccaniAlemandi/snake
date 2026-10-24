@@ -23,7 +23,10 @@ RUN node "$(find node_modules/.bun -path '*playwright-core/cli.js' | head -1)" i
  && rm -rf /var/lib/apt/lists/*
 
 COPY . .
-RUN mkdir -p /data runner/tests runner/.cache runner/.runs
+RUN mkdir -p /data runner/tests runner/.cache runner/.runs && chown -R node:node /app /data
+
+# The image's built-in non-root user; Playwright launches Chromium without its sandbox by default.
+USER node
 
 EXPOSE 3000 3002
 CMD ["bun", "run", "start"]

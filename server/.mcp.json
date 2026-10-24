@@ -2,7 +2,7 @@
   "mcpServers": {
     "agent-tester": {
       "command": "bun",
-      "args": ["server/mcp/src/stdio.ts"],
+      "args": ["mcp/src/stdio.ts"],
       "env": { "SERVER_URL": "http://localhost:3000", "WEB_URL": "http://localhost:5173" }
     }
   }

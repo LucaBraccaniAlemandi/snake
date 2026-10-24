@@ -1,14 +1,16 @@
+name: agent-tester
+
 services:
   server:
-    build: ./server
+    build: .
     ports:
       - "3000:3000" # API
       - "3002:3002" # demo shop (runs in the same container so tests can open http://localhost:3002)
-    env_file: ./server/.env
+    env_file: .env
     environment:
       DATA_DIR: /data
       # Not used yet: the server still stores data in SQLite under /data.
-      DATABASE_URL: postgres://agent:agent@db:5432/agent_tester
+      DATABASE_URL: postgres://agent:${POSTGRES_PASSWORD:-agent}@db:5432/agent_tester
     volumes:
       - server-data:/data
       - replay-cache:/app/runner/.cache
@@ -23,10 +25,10 @@ services:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: agent
-      POSTGRES_PASSWORD: agent
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agent} # set it in server/.env for anything beyond local dev
       POSTGRES_DB: agent_tester
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432" # local tools only; the server reaches it as db:5432
     volumes:
       - pg-data:/var/lib/postgresql/data
     healthcheck:
