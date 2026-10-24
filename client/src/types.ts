@@ -7,7 +7,15 @@ export type StepStatus = "pending" | "running" | "passed" | "failed" | "skipped"
 export type Test = { id: string; name: string; url: string; script: string; steps: Step[]; metadata: TestMetadata; updatedAt: string };
 export type TestListItem = Test & { lastRunStatus: RunStatus | null };
 export type StepResult = { stepId: string; text?: string; status: StepStatus; error?: string; screenshotPath?: string };
-export type RunSummary = { runId: string; status: RunStatus; passed: boolean; failedStep: { id: string; text: string } | null; error: string | null; screenshotUrl: string | null };
+export type VideoEvidence = { url: string; mediaType: string; size?: number; sha256?: string; startedAt?: string };
+export type RunSummary = { runId: string; status: RunStatus; passed: boolean; failedStep: { id: string; text: string } | null; error: string | null; screenshotUrl: string | null; videos?: VideoEvidence[] };
+export type BugStatus = "Abierto" | "En análisis" | "Resuelto" | "Cerrado";
+export type Bug = {
+  id: string; runId: string; testId: string; title: string; severity: "Alta" | "Media" | "Baja";
+  status: BugStatus; expected: string; actual: string; notes: string; ticket: string | null;
+  createdAt: string; updatedAt: string;
+};
+export type CreateBug = Pick<Bug, "title" | "severity" | "expected" | "actual"> & { notes?: string; ticket?: string | null };
 export type Run = {
   id: string; testId: string; status: RunStatus; startedAt: string | null; finishedAt: string | null;
   stepResults: StepResult[]; reportPath?: string; createdAt?: string;

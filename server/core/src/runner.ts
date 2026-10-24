@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { compile, stepLines } from "./compile";
 import { DATA_DIR, iso, newId, sql } from "./db";
 import { NotFound } from "./errors";
@@ -17,6 +17,11 @@ type RunRow = {
   test_snapshot: { name: string; url: string; steps: Test["steps"]; metadata: Test["metadata"] } | string;
 };
 const parseJson = <T>(value: T | string): T => typeof value === "string" ? JSON.parse(value) as T : value;
+const parseSummary = (value: RunSummary | string | null): RunSummary | null => {
+  if (!value) return null;
+  const summary = parseJson(value);
+  return { ...summary, videos: summary.videos ?? [] };
+};
 const toRun = (row: RunRow): Run => ({
   id: row.id, testId: row.test_id, status: row.status, startedAt: iso(row.started_at), finishedAt: iso(row.finished_at),
   createdAt: iso(row.created_at)!, stepResults: parseJson(row.step_results), testSnapshot: parseJson(row.test_snapshot),
@@ -25,14 +30,14 @@ const toRun = (row: RunRow): Run => ({
 export async function getRun(runId: string): Promise<Run & { summary: RunSummary | null }> {
   const [row] = await sql`SELECT * FROM runs WHERE id = ${runId}`;
   if (!row) throw new NotFound(`Run ${runId} not found`);
-  return { ...toRun(row as RunRow), summary: row.summary ? parseJson(row.summary) : null };
+  return { ...toRun(row as RunRow), summary: parseSummary(row.summary) };
 }
 
 export async function listRuns(testId?: string): Promise<Array<Run & { summary: RunSummary | null }>> {
   const rows = testId
     ? await sql`SELECT * FROM runs WHERE test_id = ${testId} ORDER BY created_at DESC`
     : await sql`SELECT * FROM runs ORDER BY created_at DESC`;
-  return rows.map((row) => ({ ...toRun(row as RunRow), summary: row.summary ? parseJson(row.summary) : null }));
+  return rows.map((row: any) => ({ ...toRun(row as RunRow), summary: parseSummary(row.summary) }));
 }
 
 let queue: Promise<unknown> = Promise.resolve();
@@ -78,13 +83,13 @@ async function execute(test: Test, runId: string): Promise<RunSummary> {
 
   let report: ReturnType<typeof readReport>;
   try { report = readReport(test, script, join(RUNNER_DIR, output), runId, stderr); }
-  catch (error) { report = { status: "error", stepResults: test.steps.map((step) => ({ stepId: step.id, text: step.text, status: "skipped" })), error: String(error) }; }
-  const { status, stepResults, error } = report;
+  catch (error) { report = { status: "error", stepResults: test.steps.map((step) => ({ stepId: step.id, text: step.text, status: "skipped" })), error: String(error), videos: [] }; }
+  const { status, stepResults, error, videos } = report;
   const failed = stepResults.find((result) => result.status === "failed");
   const failedStep = failed ? test.steps.find((step) => step.id === failed.stepId)! : null;
   const summary: RunSummary = {
     runId, status, passed: status === "passed", failedStep: failedStep ? { id: failedStep.id, text: failedStep.text } : null,
-    error: error ? error.slice(0, 500) : null, screenshotUrl: failed?.screenshotPath ?? null,
+    error: error ? error.slice(0, 500) : null, screenshotUrl: failed?.screenshotPath ?? null, videos,
   };
   await sql`UPDATE runs SET status = ${status}, finished_at = now(), step_results = ${JSON.stringify(stepResults)}::jsonb,
     summary = ${JSON.stringify(summary)}::jsonb WHERE id = ${runId}`;
@@ -94,10 +99,11 @@ async function execute(test: Test, runId: string): Promise<RunSummary> {
 }
 
 type ReportStep = { status: string; source?: { line: number }; error?: { message?: string } };
-type Attempt = { status: string; error?: { message?: string }; artifacts?: { kind: string; path: string }[]; steps: ReportStep[] };
+type ReportArtifact = { kind: string; path: string; mediaType?: string; size?: number; sha256?: string; startedAt?: string };
+type Attempt = { status: string; error?: { message?: string }; artifacts?: ReportArtifact[]; steps: ReportStep[] };
 
 function readReport(test: Test, script: string, outputDir: string, runId: string, stderr: string) {
-  const fail = (error: string) => ({ status: "error" as RunStatus, stepResults: test.steps.map((step): StepResult => ({ stepId: step.id, text: step.text, status: "skipped" })), error });
+  const fail = (error: string) => ({ status: "error" as RunStatus, stepResults: test.steps.map((step): StepResult => ({ stepId: step.id, text: step.text, status: "skipped" })), error, videos: [] });
   const reportPath = join(outputDir, "report.json");
   if (!existsSync(reportPath)) return fail(stderr.trim().split("\n").slice(-5).join("\n") || "e2e produced no report");
   const run = JSON.parse(readFileSync(reportPath, "utf8")).run;
@@ -113,6 +119,27 @@ function readReport(test: Test, script: string, outputDir: string, runId: string
     copyFileSync(join(outputDir, "results", shot.path), join(dir, "failure.png"));
     screenshotUrl = `/artifacts/${runId}/failure.png`;
   }
+  const videos = (attempt.artifacts ?? []).filter((artifact) => artifact.kind === "video").flatMap((artifact) => {
+    const resultsDir = resolve(outputDir, "results");
+    const source = resolve(resultsDir, artifact.path);
+    const sourceRelative = relative(resultsDir, source);
+    if (!sourceRelative || sourceRelative.startsWith(`..${sep}`) || sourceRelative === ".." || isAbsolute(sourceRelative) || !existsSync(source)) return [];
+
+    const runDir = resolve(DATA_DIR, "runs", runId);
+    const destination = resolve(runDir, sourceRelative);
+    const destinationRelative = relative(runDir, destination);
+    if (destinationRelative.startsWith(`..${sep}`) || destinationRelative === ".." || isAbsolute(destinationRelative)) return [];
+    mkdirSync(dirname(destination), { recursive: true });
+    copyFileSync(source, destination);
+    const urlPath = sourceRelative.split(sep).map(encodeURIComponent).join("/");
+    return [{
+      url: `/artifacts/${encodeURIComponent(runId)}/${urlPath}`,
+      mediaType: artifact.mediaType || "video/webm",
+      ...(typeof artifact.size === "number" ? { size: artifact.size } : {}),
+      ...(artifact.sha256 ? { sha256: artifact.sha256 } : {}),
+      ...(artifact.startedAt ? { startedAt: artifact.startedAt } : {}),
+    }];
+  });
   const lines = stepLines(script);
   const byStep = new Map<string, ReportStep[]>();
   for (const step of attempt.steps) {
@@ -127,5 +154,5 @@ function readReport(test: Test, script: string, outputDir: string, runId: string
     return { stepId: step.id, text: step.text, status: "failed" as StepStatus, error: failed.error?.message?.slice(0, 500), screenshotPath: screenshotUrl };
   });
   const status: RunStatus = run.status === "passed" ? "passed" : run.status === "failed" ? "failed" : "error";
-  return { status, stepResults, error: attempt.error?.message ?? null };
+  return { status, stepResults, error: attempt.error?.message ?? null, videos };
 }

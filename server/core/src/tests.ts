@@ -23,7 +23,7 @@ export async function listTests(workspaceId = DEFAULT_WORKSPACE_ID): Promise<Tes
     SELECT t.id, t.workspace_id, t.name, t.url, t.steps, t.metadata, t.updated_at,
       (SELECT status FROM runs r WHERE r.test_id = t.id ORDER BY r.created_at DESC LIMIT 1) AS last_status
     FROM tests t WHERE t.workspace_id = ${workspaceId} ORDER BY t.updated_at DESC`;
-  return rows.map((row) => {
+  return rows.map((row: any) => {
     const steps = parseJson<Step[]>(row.steps, []);
     return { id: row.id, workspaceId: row.workspace_id, name: row.name, url: row.url, script: compile({ id: row.id, url: row.url, steps }), steps, metadata: parseJson(row.metadata, {}), lastRunStatus: (row.last_status as RunStatus) ?? null, updatedAt: iso(row.updated_at)! };
   });

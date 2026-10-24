@@ -6,6 +6,7 @@ emitter.setMaxListeners(0);
 
 export function publish(testId: string, event: TestEvent) {
   emitter.emit(testId, event);
+  emitter.emit("all", event);
 }
 
 export function subscribe(testId: string, listener: (event: TestEvent) => void): () => void {

@@ -1,4 +1,4 @@
-import type { Run, Test, TestListItem } from "../types";
+import type { Bug, CreateBug, Run, Test, TestListItem, BugStatus } from "../types";
 import type { CaseStep, DemoRun, TestCase } from "./model";
 import type { TestMetadata } from "../types";
 
@@ -13,6 +13,48 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 const metadata = (test: Pick<TestCase, "key" | "componentId" | "status" | "priority" | "preconditions" | "jiraId" | "testType" | "release" | "notes">) => ({ ...test });
+
+export type ChatInputMessage = { id: string; role: "user" | "assistant"; parts: { type: "text"; text: string }[] };
+export type ChatStreamEvent = {
+  type: string; delta?: string; toolCallId?: string; toolName?: string; input?: unknown;
+  output?: unknown; errorText?: string;
+};
+
+export async function streamChat(
+  input: { messages: ChatInputMessage[]; testId?: string; baseUrl?: string },
+  onEvent: (event: ChatStreamEvent) => void,
+  signal?: AbortSignal,
+) {
+  const response = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "text/event-stream" },
+    body: JSON.stringify(input),
+    signal,
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string } | null;
+    throw new Error(body?.error || `No se pudo iniciar el chat (${response.status})`);
+  }
+  if (!response.body) throw new Error("El servidor no devolvió un stream de respuesta");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const processLine = (line: string) => {
+    if (!line.startsWith("data:")) return;
+    const payload = line.slice(5).trimStart();
+    if (payload && payload !== "[DONE]") onEvent(JSON.parse(payload) as ChatStreamEvent);
+  };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || "";
+    lines.forEach(processLine);
+  }
+  buffer += decoder.decode();
+  if (buffer) processLine(buffer);
+}
 
 export function fromTest(test: Test | TestListItem): TestCase {
   const fields = test.metadata ?? {};
@@ -63,4 +105,8 @@ export const api = {
   listRuns: () => request<(Run & { summary?: Run["summary"] })[]>("/api/runs"),
   getRun: (id: string) => request<Run & { summary?: Run["summary"] }>(`/api/runs/${encodeURIComponent(id)}`),
   startRun: (id: string) => request<{ runId: string }>(`/api/tests/${encodeURIComponent(id)}/run`, { method: "POST" }),
+  listBugs: (workspaceId = "default") => request<Bug[]>(`/api/workspaces/${encodeURIComponent(workspaceId)}/bugs`),
+  getBug: (id: string) => request<Bug>(`/api/bugs/${encodeURIComponent(id)}`),
+  createBug: (runId: string, bug: CreateBug) => request<Bug>(`/api/runs/${encodeURIComponent(runId)}/bugs`, { method: "POST", body: JSON.stringify(bug) }),
+  updateBug: (id: string, patch: { status?: BugStatus; ticket?: string | null }) => request<Bug>(`/api/bugs/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) }),
 };

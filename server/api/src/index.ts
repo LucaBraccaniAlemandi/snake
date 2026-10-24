@@ -1,24 +1,28 @@
 import { Hono } from "hono";
-import { serveStatic } from "hono/bun";
 import { streamSSE } from "hono/streaming";
 import {
   BadRequest,
   CreateTestBody,
+  CreateBugBody,
   DATA_DIR,
   EditStepBody,
   NotFound,
   PutStepsBody,
   UpdateTestBody,
+  UpdateBugBody,
   WorkspaceBody,
   DEFAULT_WORKSPACE_ID,
   createTest,
+  createBug,
   createWorkspace,
   deleteTest,
   deleteWorkspace,
   editStep,
   getRun,
+  getBug,
   getTest,
   listRuns,
+  listBugs,
   listTests,
   listWorkspaces,
   migrate,
@@ -28,6 +32,7 @@ import {
   startRun,
   subscribe,
   updateTest,
+  updateBug,
   type TestEvent,
 } from "@agent-tester/core";
 import { z } from "zod";
@@ -92,15 +97,26 @@ app.post("/api/tests/:id/run", async (c) => {
   if (c.req.query("wait") === "true") return c.json(await done);
   return c.json({ runId }, 202);
 });
-app.post("/api/chat", async (c) => chat(await c.req.json()));
+app.post("/api/chat", async (c) => chat(await c.req.json(), c.req.raw.signal));
 app.get("/api/tests/:id/runs", async (c) => c.json(await listRuns(c.req.param("id"))));
 app.get("/api/runs", async (c) => c.json(await listRuns()));
 app.get("/api/runs/:runId", async (c) => c.json(await getRun(c.req.param("runId"))));
-app.use("/artifacts/*", serveStatic({ root: `${DATA_DIR}/runs`, rewriteRequestPath: (p) => p.replace(/^\/artifacts/, "") }));
+app.get("/api/workspaces/:wid/bugs", async (c) => c.json(await listBugs(c.req.param("wid"))));
+app.get("/api/bugs/:bugId", async (c) => c.json(await getBug(c.req.param("bugId"))));
+app.post("/api/runs/:runId/bugs", async (c) =>
+  c.json(await createBug(c.req.param("runId"), CreateBugBody.parse(await c.req.json())), 201),
+);
+app.patch("/api/bugs/:bugId", async (c) =>
+  c.json(await updateBug(c.req.param("bugId"), UpdateBugBody.parse(await c.req.json()))),
+);
 
+app.get("/api/events", (c) => eventStream(c, "all"));
 app.get("/api/tests/:id/events", async (c) => {
-  const id = c.req.param("id");
-  await getTest(id);
+  await getTest(c.req.param("id"));
+  return eventStream(c, c.req.param("id"));
+});
+
+function eventStream(c: Parameters<typeof streamSSE>[0], id: string) {
   return streamSSE(c, async (stream) => {
     const queue: TestEvent[] = [];
     let wake: (() => void) | undefined;
@@ -127,6 +143,11 @@ app.get("/api/tests/:id/events", async (c) => {
       if (!queue.length && !stream.aborted) await stream.write(": ping\n\n");
     }
   });
-});
+}
 
-export default { port: Number(process.env.PORT ?? 3000), fetch: app.fetch, idleTimeout: 0 };
+export default {
+  port: Number(process.env.PORT ?? 3000),
+  routes: { "/artifacts/*": { dir: `${DATA_DIR}/runs` } },
+  fetch: app.fetch,
+  idleTimeout: 0,
+};

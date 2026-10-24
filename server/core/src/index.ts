@@ -5,6 +5,7 @@ export * from "./compile";
 export * from "./events";
 export * from "./tests";
 export * from "./workspaces";
+export * from "./bugs";
 export * from "./runner";
 export * from "./tools";
 export { DATA_DIR, migrate, sql } from "./db";

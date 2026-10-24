@@ -23,7 +23,7 @@ Bun workspace. Requires Bun 1.4.2, Node ≥ 24.8 (for e2e/Playwright), and Postg
 ```sh
 cd server
 bun install
-cp .env.example .env         # set ANTHROPIC_API_KEY; DATABASE_URL points at the Docker Postgres
+cp .env.example .env         # set API_KEY (or OPENROUTER_API_KEY); DATABASE_URL points at the Docker Postgres
 docker compose up -d db      # Postgres only, on 127.0.0.1:5432
 bun run dev                  # api :3000 (runs migrations on start), demo-shop :3002
 ```
@@ -41,15 +41,20 @@ server/demo-shop/  demo target on :3002
 ### Docker
 
 ```sh
-cd server
-cp .env.example .env         # set ANTHROPIC_API_KEY (and POSTGRES_PASSWORD)
-docker compose up -d --build  # api :3000, demo shop :3002, postgres on 127.0.0.1:5432
+cp server/.env.example server/.env  # set ANTHROPIC_API_KEY for AI features
+docker compose -f server/docker-compose.yml up --build
 ```
 
+- Run detached with `docker compose -f server/docker-compose.yml up --build -d`; follow output with `docker compose -f server/docker-compose.yml logs -f`.
+- **Frontend:** http://localhost:5173 — Vite dev server with HMR; source is bind-mounted so saved code changes appear without rebuilding.
+- **API:** http://localhost:3000.
+- **Demo shop:** http://localhost:3002.
+- **Postgres:** localhost:5432; application data lives in the `pg-data` volume.
 - **Image:** `server/Dockerfile` builds on `node:24` and adds Bun and the Chromium headless shell required by `@e2e-dev/web`.
-- **Volumes:** `pg-data` holds Postgres, `server-data` holds screenshots, and `replay-cache` holds e2e's Replay Cache.
+- **Volumes:** `pg-data` holds Postgres, `server-data` holds screenshots, `replay-cache` holds e2e's Replay Cache, and `client-node-modules` holds frontend dependencies.
 - **Postgres:** holds all application state. Compose sets `DATABASE_URL`; SQL migrations run when the server starts.
 - **Reachable URLs:** tests run inside the container, so a Starting URL must be reachable from there. `http://localhost:3002` (the demo shop in the same container) and public URLs work. Your host's `localhost` apps don't.
+- Use `docker compose -f server/docker-compose.yml down` to stop the stack. Named volumes are preserved; add `-v` only to intentionally delete persisted data.
 
 ### MCP
 

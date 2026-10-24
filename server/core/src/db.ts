@@ -16,6 +16,13 @@ const MIGRATIONS_DIR = join(import.meta.dir, "../migrations");
 
 // Applies core/migrations/*.sql in name order, each once and in its own transaction.
 export async function migrate() {
+  const columns = await sql`SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'schema_migrations'`;
+  const columnNames = new Set(columns.map((column: { column_name: string }) => column.column_name));
+  if (columnNames.has("version") && !columnNames.has("name")) {
+    const [legacyTable] = await sql`SELECT to_regclass('public.schema_migrations_legacy') AS table_name`;
+    if (legacyTable?.table_name) throw new Error("Both legacy and current schema_migrations tables exist; resolve the migration history before starting the API.");
+    await sql`ALTER TABLE schema_migrations RENAME TO schema_migrations_legacy`;
+  }
   await sql`CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
   const applied = new Set((await sql`SELECT name FROM schema_migrations`).map((r: { name: string }) => r.name));
   for (const name of readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql")).sort()) {
@@ -29,7 +36,7 @@ export async function migrate() {
   await importLegacySqlite();
   await sql`UPDATE runs SET status = 'error', finished_at = now(),
     summary = jsonb_build_object('runId', id, 'status', 'error', 'passed', false,
-      'failedStep', null, 'error', 'Server restarted during execution', 'screenshotUrl', null)
+      'failedStep', null, 'error', 'Server restarted during execution', 'screenshotUrl', null, 'videos', '[]'::jsonb)
     WHERE status IN ('queued', 'running')`;
 }
 

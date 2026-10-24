@@ -1,5 +1,5 @@
-ALTER TABLE tests ADD COLUMN metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
-ALTER TABLE runs ADD COLUMN test_snapshot JSONB;
+ALTER TABLE tests ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS test_snapshot JSONB;
 
 UPDATE runs r SET test_snapshot = jsonb_build_object(
   'name', t.name,
