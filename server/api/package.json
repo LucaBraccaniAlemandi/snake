@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@agent-tester/core": "workspace:*",
-    "@ai-sdk/anthropic": "^4",
+    "@ai-sdk/openai": "^4",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "ai": "^7",
     "hono": "^4.13.13",
     "zod": "^4.6.7"

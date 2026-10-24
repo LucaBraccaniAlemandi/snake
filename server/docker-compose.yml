@@ -17,7 +17,35 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 20s
     shm_size: 1gb # Chromium needs more shared memory than Docker's 64MB default
+    restart: unless-stopped
+
+  client:
+    build: ../client
+    environment:
+      DOCKER_DEV: "1"
+      VITE_API_PROXY_TARGET: http://server:3000
+      VITE_OPEN_BROWSER: "false"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../client:/app
+      - client-node-modules:/app/node_modules
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:5173').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 10s
     restart: unless-stopped
 
   # All server state (Workspaces, Tests, Runs). Migrations run when the server starts.
@@ -41,3 +69,4 @@ volumes:
   server-data:
   replay-cache:
   pg-data:
+  client-node-modules:

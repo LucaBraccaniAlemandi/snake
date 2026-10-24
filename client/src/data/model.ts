@@ -1,4 +1,5 @@
 import type { Run, Step, Test } from "../types";
+import type { Bug as ApiBug } from "../types";
 
 // UI-only documentation fields. The REST contract in types.ts remains unchanged.
 export const caseStatuses = ["Publicado", "En revisión", "Borrador", "Deprecado"] as const;
@@ -13,8 +14,9 @@ export type TestCase = Omit<Test, "steps" | "metadata"> & {
 };
 export type Component = { id: string; name: string; description: string; systems: string[]; actors: string[]; platforms: string[] };
 export type DemoRun = Run & { name: string; testName: string; environment: string; steps: CaseStep[]; demo: boolean };
-export type Bug = { id: string; runId: string; testId: string; title: string; severity: Priority; status: "Abierto" | "En análisis" | "Resuelto" | "Cerrado"; expected: string; actual: string; notes: string };
-export type Message = { id: string; role: "user" | "assistant"; content: string; draft?: { name: string; steps: CaseStep[] }; savedCaseId?: string };
+export type Bug = ApiBug;
+export type ChatActivity = { id: string; name: string; status: "running" | "done" | "error"; detail?: string };
+export type Message = { id: string; role: "user" | "assistant"; content: string; draft?: { name: string; steps: CaseStep[] }; savedCaseId?: string; activities?: ChatActivity[]; streaming?: boolean; error?: boolean };
 export type Conversation = { id: string; title: string; testId: string; messages: Message[]; updatedAt: string };
 export type Preferences = { environment: string; projectName: string; baseUrl: string; provider: string; model: string; repo: string; branch: string; jiraUrl: string; jiraProject: string; chrome: boolean; appium: boolean; mcpUrl: string };
 export type Workspace = { version: 1; components: Component[]; cases: TestCase[]; runs: DemoRun[]; bugs: Bug[]; conversations: Conversation[]; preferences: Preferences };

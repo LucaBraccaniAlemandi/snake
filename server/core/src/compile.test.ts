@@ -25,3 +25,13 @@ test("stepLines maps lines back to step ids", () => {
   expect([...lines.values()]).toEqual(["s1", "s2", "s3", "s4"]);
   expect(lines.get(6)).toBe("s1");
 });
+
+test("input data and expected results are executable and mapped to their original step", () => {
+  const script = compile({ ...t, steps: [{ id: "s1", type: "act", text: "Add a mug", data: "Quantity: 1", expected: "Cart shows 999 mugs" }] });
+  expect(script).toContain('await agent.act("Add a mug\\nDatos de entrada: Quantity: 1"); // step:s1');
+  expect(script).toContain('await agent.assert("Cart shows 999 mugs"); // step:s1');
+  expect([...stepLines(script).values()]).toEqual(["s1", "s1"]);
+  const edited = compile({ ...t, steps: [{ id: "s1", type: "act", text: "Open cart", expected: "Cart is empty" }] });
+  expect(edited).not.toContain("999 mugs");
+  expect(edited).toContain('await agent.assert("Cart is empty")');
+});

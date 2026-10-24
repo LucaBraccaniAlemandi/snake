@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Step, type Run, type RunStatus, type StepStatus, type Test } from "./schema";
+import { BugSeverity, BugStatus, Step, type Run, type RunStatus, type StepStatus, type Test } from "./schema";
 
 // REST contract served by api, consumed by mcp and the client (client/src/types.ts mirrors it).
 // GET    /api/workspaces                -> Workspace[]
@@ -15,6 +15,10 @@ import { Step, type Run, type RunStatus, type StepStatus, type Test } from "./sc
 // POST   /api/tests/:id/steps/edit      EditStepBody -> Test
 // POST   /api/tests/:id/run[?wait=true] -> 202 { runId } | RunSummary
 // GET    /api/runs/:runId               -> Run & { summary }
+// GET    /api/workspaces/:wid/bugs       -> Bug[] ordered by report date DESC
+// GET    /api/bugs/:bugId                 -> Bug
+// POST   /api/runs/:runId/bugs           CreateBugBody -> Bug
+// PATCH  /api/bugs/:bugId                 UpdateBugBody -> Bug
 // GET    /api/tests/:id/events          SSE, see TestEvent
 // POST   /api/chat                      { messages, testId } -> AI SDK UI message stream
 // GET    /artifacts/:runId/failure.png  screenshot of a failed Run
@@ -40,7 +44,22 @@ export const EditStepBody = z.object({
 });
 export type EditStepBody = z.infer<typeof EditStepBody>;
 
-export const UpdateTestBody = z.object({ name: z.string().min(1).optional(), url: z.string().url().optional(), metadata: TestMetadata.partial().optional() });
+export const UpdateTestBody = z.object({ name: z.string().min(1).optional(), url: z.string().url().optional(), metadata: TestMetadata.partial().optional(), steps: PutStepsBody.shape.steps.optional() });
+
+const TicketReference = z.string().trim().max(500).nullable().optional();
+export const CreateBugBody = z.object({
+  title: z.string().trim().min(1).max(300),
+  severity: BugSeverity,
+  expected: z.string().trim().min(1).max(5000),
+  actual: z.string().trim().min(1).max(5000),
+  notes: z.string().trim().max(5000).default(""),
+  ticket: TicketReference,
+});
+export type CreateBugBody = z.infer<typeof CreateBugBody>;
+
+export const UpdateBugBody = z.object({ status: BugStatus.optional(), ticket: TicketReference })
+  .refine((value) => value.status !== undefined || value.ticket !== undefined, "Provide a status or ticket to update");
+export type UpdateBugBody = z.infer<typeof UpdateBugBody>;
 
 export type ApiError = { error: string };
 

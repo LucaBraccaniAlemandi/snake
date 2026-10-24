@@ -22,6 +22,21 @@ export type RunStatus = z.infer<typeof RunStatus>;
 export const StepStatus = z.enum(["pending", "running", "passed", "failed", "skipped"]);
 export type StepStatus = z.infer<typeof StepStatus>;
 
+export const BugSeverity = z.enum(["Alta", "Media", "Baja"]);
+export type BugSeverity = z.infer<typeof BugSeverity>;
+
+export const BugStatus = z.enum(["Abierto", "En análisis", "Resuelto", "Cerrado"]);
+export type BugStatus = z.infer<typeof BugStatus>;
+
+export const VideoEvidence = z.object({
+  url: z.string(),
+  mediaType: z.string(),
+  size: z.number().nonnegative().optional(),
+  sha256: z.string().optional(),
+  startedAt: z.string().optional(),
+});
+export type VideoEvidence = z.infer<typeof VideoEvidence>;
+
 export const Workspace = z.object({
   id: z.string(),
   name: z.string(),
@@ -94,5 +109,22 @@ export const RunSummary = z.object({
   failedStep: z.object({ id: z.string(), text: z.string() }).nullable(),
   error: z.string().max(500).nullable(),
   screenshotUrl: z.string().nullable(),
+  videos: z.array(VideoEvidence).default([]),
 });
 export type RunSummary = z.infer<typeof RunSummary>;
+
+export const Bug = z.object({
+  id: z.string(),
+  runId: z.string(),
+  testId: z.string(),
+  title: z.string(),
+  severity: BugSeverity,
+  status: BugStatus,
+  expected: z.string(),
+  actual: z.string(),
+  notes: z.string(),
+  ticket: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Bug = z.infer<typeof Bug>;

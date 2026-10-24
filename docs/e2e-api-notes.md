@@ -6,7 +6,7 @@ These notes cover `e2e@0.21.3` and `@e2e-dev/web@0.15.3` by TesterArmy (github.c
 
 - Node `^22.22.3 || >=24.8.0`. e2e always runs under Node, even when started with `bunx`.
 - `@e2e-dev/web` pins `playwright-core@1.64.1`. On the first run it downloads Chrome Headless Shell into `~/Library/Caches/ms-playwright`.
-- Peer deps: `ai@^7` and `@ai-sdk/anthropic@^4`. The provider reads `ANTHROPIC_API_KEY`.
+- Peer deps: `ai@^7` and `@ai-sdk/openai@^4`. OpenRouter is configured through the OpenAI-compatible provider at `https://openrouter.ai/api/v1` and reads `OPENROUTER_API_KEY`.
 - Disable telemetry with `E2E_TELEMETRY_DISABLED=1`. `DO_NOT_TRACK=1` also works.
 - e2e does not load `.env`. Call `process.loadEnvFile()` in the config if you need it.
 
@@ -41,9 +41,10 @@ test("Checkout with coupon", async ({ app, browser, agent, screen }) => {
 The config is found from the cwd upward, or set with `--config`. Its directory is the project root, and an unknown key gives `INVALID_CONFIG`.
 
 ```ts
-import { anthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
+const openrouter = createOpenAI({ baseURL: "https://openrouter.ai/api/v1", apiKey: process.env.OPENROUTER_API_KEY });
 export default {
-  agents: { default: { model: anthropic(process.env.E2E_MODEL ?? "claude-sonnet-5-5") } },
+  agents: { default: { model: openrouter.chat((process.env.E2E_MODEL ?? "openrouter/inception/mercury-2.5").replace(/^openrouter\//, "")) } },
   targets: [{ engine: web(), app: { url: "http://localhost:3002" } }],
   tests: "tests/**/*.e2e.ts",   // files outside this glob -> exit 2 NO_TESTS
   timeout: 120000, retries: 0, output: ".e2e", trace: "retain-on-failure", video: "off",
@@ -52,6 +53,8 @@ export default {
 ```
 
 Opus 5.5 and Sonnet 5.5 reject a forced tool choice, and e2e falls back to `auto` on its own.
+
+The application shares provider configuration in `server/core/src/model.ts`. Use Chat Completions explicitly for OpenRouter. Unit tests in `model.test.ts` use a simulated HTTP transport and never send real credentials. A live text-generation smoke check from the rebuilt server container returned `OK` with `inception/mercury-2.5` on 2026-10-24; a full browser-agent run is a separate check.
 
 ## CLI: `e2e run [files...]`
 
@@ -93,7 +96,7 @@ Opus 5.5 and Sonnet 5.5 reject a forced tool choice, and e2e falls back to `auto
 
 ## Not verified yet
 
-These still need a real `ANTHROPIC_API_KEY`:
+These still need a real `OPENROUTER_API_KEY`:
 - a live `agent.act`/`agent.assert` run and its full step fields
 - the cache entry format
 - the runner API under Bun
