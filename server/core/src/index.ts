@@ -4,4 +4,5 @@ export * from "./api";
 export * from "./compile";
 export * from "./events";
 export * from "./tests";
+export * from "./runner";
 export { DATA_DIR } from "./db";

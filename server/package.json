@@ -1,7 +1,13 @@
 {
   "name": "agent-tester-server",
   "private": true,
-  "workspaces": ["api", "mcp", "core", "demo-shop"],
+  "workspaces": [
+    "api",
+    "mcp",
+    "core",
+    "demo-shop",
+    "runner"
+  ],
   "scripts": {
     "dev": "concurrently -n api,mcp,shop -c green,magenta,yellow \"bun run --cwd api dev\" \"bun run --cwd mcp dev\" \"bun run --cwd demo-shop dev\"",
     "mcp:stdio": "bun mcp/src/stdio.ts",

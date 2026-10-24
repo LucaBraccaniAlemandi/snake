@@ -1,17 +1,21 @@
 import { Hono } from "hono";
+import { serveStatic } from "hono/bun";
 import { streamSSE } from "hono/streaming";
 import {
   BadRequest,
   CreateTestBody,
+  DATA_DIR,
   EditStepBody,
   NotFound,
   PutStepsBody,
   createTest,
   deleteTest,
   editStep,
+  getRun,
   getTest,
   listTests,
   setSteps,
+  startRun,
   subscribe,
   updateTest,
   type TestEvent,
@@ -51,6 +55,14 @@ app.put("/api/tests/:id/steps", async (c) =>
 app.post("/api/tests/:id/steps/edit", async (c) =>
   c.json(editStep(c.req.param("id"), EditStepBody.parse(await c.req.json()), source(c))),
 );
+
+app.post("/api/tests/:id/run", async (c) => {
+  const { runId, done } = startRun(c.req.param("id"));
+  if (c.req.query("wait") === "true") return c.json(await done);
+  return c.json({ runId }, 202);
+});
+app.get("/api/runs/:runId", (c) => c.json(getRun(c.req.param("runId"))));
+app.use("/artifacts/*", serveStatic({ root: `${DATA_DIR}/runs`, rewriteRequestPath: (p) => p.replace(/^\/artifacts/, "") }));
 
 app.get("/api/tests/:id/events", (c) => {
   const id = c.req.param("id");

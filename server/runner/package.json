@@ -1,0 +1,12 @@
+{
+  "name": "@agent-tester/runner",
+  "private": true,
+  "type": "module",
+  "description": "The e2e project every Run executes in. Tests are written to tests/<testId>.e2e.ts by core/src/runner.ts.",
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4",
+    "@e2e-dev/web": "0.15.3",
+    "ai": "^7",
+    "e2e": "0.21.3"
+  }
+}
