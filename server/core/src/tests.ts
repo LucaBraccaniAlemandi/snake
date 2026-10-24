@@ -1,71 +1,75 @@
 import type { EditStepBody } from "./api";
 import { compile } from "./compile";
-import { db, newId, ready } from "./db";
+import { iso, newId, sql } from "./db";
+import { BadRequest, NotFound } from "./errors";
 import { publish } from "./events";
 import type { RunStatus, Step, Test, TestListItem } from "./schema";
+import { DEFAULT_WORKSPACE_ID, getWorkspace, removeArtifacts } from "./workspaces";
 
+export { BadRequest, NotFound };
 export type Source = "web" | "chat" | "mcp";
-export class NotFound extends Error {}
-export class BadRequest extends Error {}
 
-type TestRow = { id: string; name: string; url: string; steps: Step[]; metadata: Test["metadata"]; updated_at: Date | string };
-const json = <T>(value: T | string): T => typeof value === "string" ? JSON.parse(value) as T : value;
-const iso = (value: Date | string) => new Date(value).toISOString();
+type TestRow = { id: string; workspace_id: string; name: string; url: string; steps: Step[] | string; metadata?: Test["metadata"] | string; updated_at: Date | string };
+const parseJson = <T>(value: T | string | undefined, fallback: T): T => value === undefined ? fallback : typeof value === "string" ? JSON.parse(value) as T : value;
 
 function toTest(row: TestRow): Test {
-  const steps = json<Step[]>(row.steps);
-  return { id: row.id, name: row.name, url: row.url, steps, metadata: json(row.metadata), script: compile({ id: row.id, url: row.url, steps }), updatedAt: iso(row.updated_at) };
+  const steps = parseJson<Step[]>(row.steps, []);
+  return { id: row.id, workspaceId: row.workspace_id, name: row.name, url: row.url, steps, metadata: parseJson(row.metadata, {}), script: compile({ id: row.id, url: row.url, steps }), updatedAt: iso(row.updated_at)! };
 }
 
-export async function listTests(): Promise<TestListItem[]> {
-  await ready;
-  const rows = await db`SELECT t.id, t.name, t.url, t.steps, t.metadata, t.updated_at,
-    (SELECT status FROM runs r WHERE r.test_id = t.id ORDER BY r.created_at DESC LIMIT 1) AS last_status
-    FROM tests t ORDER BY t.updated_at DESC`;
-  return rows.map((r) => {
-    const steps = json<Step[]>(r.steps);
-    return { id: r.id, name: r.name, url: r.url, script: compile({ id: r.id, url: r.url, steps }), steps, metadata: json(r.metadata), lastRunStatus: (r.last_status as RunStatus) ?? null, updatedAt: iso(r.updated_at) };
+export async function listTests(workspaceId = DEFAULT_WORKSPACE_ID): Promise<TestListItem[]> {
+  await getWorkspace(workspaceId);
+  const rows = await sql`
+    SELECT t.id, t.workspace_id, t.name, t.url, t.steps, t.metadata, t.updated_at,
+      (SELECT status FROM runs r WHERE r.test_id = t.id ORDER BY r.created_at DESC LIMIT 1) AS last_status
+    FROM tests t WHERE t.workspace_id = ${workspaceId} ORDER BY t.updated_at DESC`;
+  return rows.map((row) => {
+    const steps = parseJson<Step[]>(row.steps, []);
+    return { id: row.id, workspaceId: row.workspace_id, name: row.name, url: row.url, script: compile({ id: row.id, url: row.url, steps }), steps, metadata: parseJson(row.metadata, {}), lastRunStatus: (row.last_status as RunStatus) ?? null, updatedAt: iso(row.updated_at)! };
   });
 }
 
 export async function getTest(id: string): Promise<Test> {
-  await ready;
-  const [row] = await db<TestRow[]>`SELECT * FROM tests WHERE id = ${id}`;
+  const [row] = await sql`SELECT * FROM tests WHERE id = ${id}`;
   if (!row) throw new NotFound(`Test ${id} not found`);
-  return toTest(row);
+  return toTest(row as TestRow);
 }
 
-export async function createTest(input: { name: string; url: string; metadata?: Test["metadata"] }): Promise<Test> {
-  await ready;
+export async function createTest(workspaceId: string, input: { name: string; url: string; metadata?: Test["metadata"] }): Promise<Test> {
+  await getWorkspace(workspaceId);
   const id = newId("t");
   const metadata = { ...input.metadata, key: input.metadata?.key || `TC-${id.slice(1).toUpperCase()}` };
-  await db`INSERT INTO tests (id, name, url, steps, metadata) VALUES (${id}, ${input.name}, ${input.url}, '[]'::jsonb, ${db.json(metadata)})`;
-  return getTest(id);
+  const [row] = await sql`INSERT INTO tests (id, workspace_id, name, url, metadata)
+    VALUES (${id}, ${workspaceId}, ${input.name}, ${input.url}, ${JSON.stringify(metadata)}::jsonb) RETURNING *`;
+  return toTest(row as TestRow);
 }
 
-export async function updateTest(id: string, patch: { name?: string; url?: string; metadata?: Test["metadata"] }, source: Source): Promise<Test> {
-  const t = await getTest(id);
-  const metadata = { ...t.metadata, ...patch.metadata };
-  await db`UPDATE tests SET name = ${patch.name ?? t.name}, url = ${patch.url ?? t.url}, metadata = ${db.json(metadata)}, updated_at = now() WHERE id = ${id}`;
+export async function updateTest(id: string, patch: { name?: string; url?: string; metadata?: Partial<Test["metadata"]> }, source: Source): Promise<Test> {
+  const current = await getTest(id);
+  const metadata = { ...current.metadata, ...patch.metadata };
+  await sql`UPDATE tests SET name = ${patch.name ?? current.name}, url = ${patch.url ?? current.url},
+    metadata = ${JSON.stringify(metadata)}::jsonb, updated_at = now() WHERE id = ${id}`;
   return broadcast(id, source);
 }
 
 export async function deleteTest(id: string): Promise<void> {
   await getTest(id);
-  await db`DELETE FROM tests WHERE id = ${id}`;
+  const runs = await sql`SELECT id FROM runs WHERE test_id = ${id}`;
+  await sql`DELETE FROM tests WHERE id = ${id}`;
+  removeArtifacts(runs.map((row: { id: string }) => row.id));
 }
 
 export async function setSteps(id: string, steps: Array<Omit<Step, "id"> & { id?: string }>, source: Source): Promise<Test> {
   await getTest(id);
-  const withIds: Step[] = steps.map((s) => ({ ...s, id: s.id || newId("s") }));
-  await db`UPDATE tests SET steps = ${db.json(withIds)}, updated_at = now() WHERE id = ${id}`;
+  const withIds: Step[] = steps.map((step) => ({ ...step, id: step.id || newId("s") }));
+  await sql`UPDATE tests SET steps = ${JSON.stringify(withIds)}::jsonb, updated_at = now() WHERE id = ${id}`;
   return broadcast(id, source);
 }
 
 export async function editStep(id: string, edit: EditStepBody, source: Source): Promise<Test> {
   const steps = [...(await getTest(id)).steps];
   const index = (stepId?: string) => {
-    const i = steps.findIndex((s) => s.id === stepId);
+    const i = steps.findIndex((step) => step.id === stepId);
     if (i < 0) throw new BadRequest(`Step ${stepId} not found`);
     return i;
   };

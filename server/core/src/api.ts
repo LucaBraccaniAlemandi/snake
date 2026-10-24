@@ -2,19 +2,25 @@ import { z } from "zod";
 import { Step, type Run, type RunStatus, type StepStatus, type Test } from "./schema";
 
 // REST contract served by api, consumed by mcp and the client (client/src/types.ts mirrors it).
-// GET    /api/tests                   -> TestListItem[]
-// POST   /api/tests                   CreateTestBody -> Test
-// GET    /api/tests/:id               -> Test
-// PATCH  /api/tests/:id               { name?, url? } -> Test
-// DELETE /api/tests/:id               -> 204
-// PUT    /api/tests/:id/steps         PutStepsBody -> Test
-// POST   /api/tests/:id/steps/edit    EditStepBody -> Test
-// POST   /api/tests/:id/run[?wait=true] -> { runId } | RunSummary
-// GET    /api/tests/:id/runs          -> Run[]
-// GET    /api/runs/:runId             -> Run
-// GET    /api/tests/:id/events        SSE, see TestEvent
-// POST   /api/chat                    { messages, testId } -> AI SDK UI message stream
-// GET    /artifacts/*                 run artifacts (screenshots)
+// GET    /api/workspaces                -> Workspace[]
+// POST   /api/workspaces                { name } -> Workspace
+// PATCH  /api/workspaces/:wid           { name } -> Workspace
+// DELETE /api/workspaces/:wid           -> 204, cascades to Tests and Runs (the last Workspace can't be deleted)
+// GET    /api/workspaces/:wid/tests     -> TestListItem[]
+// POST   /api/workspaces/:wid/tests     CreateTestBody -> Test
+// GET    /api/tests/:id                 -> Test
+// PATCH  /api/tests/:id                 { name?, url? } -> Test
+// DELETE /api/tests/:id                 -> 204
+// PUT    /api/tests/:id/steps           PutStepsBody -> Test
+// POST   /api/tests/:id/steps/edit      EditStepBody -> Test
+// POST   /api/tests/:id/run[?wait=true] -> 202 { runId } | RunSummary
+// GET    /api/runs/:runId               -> Run & { summary }
+// GET    /api/tests/:id/events          SSE, see TestEvent
+// POST   /api/chat                      { messages, testId } -> AI SDK UI message stream
+// GET    /artifacts/:runId/failure.png  screenshot of a failed Run
+
+export const WorkspaceBody = z.object({ name: z.string().min(1) });
+export type WorkspaceBody = z.infer<typeof WorkspaceBody>;
 
 export const TestMetadata = z.object({
   key: z.string().optional(), componentId: z.string().optional(), status: z.string().optional(), priority: z.string().optional(),

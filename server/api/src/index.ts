@@ -9,14 +9,21 @@ import {
   NotFound,
   PutStepsBody,
   UpdateTestBody,
-  ready,
+  WorkspaceBody,
+  DEFAULT_WORKSPACE_ID,
   createTest,
+  createWorkspace,
   deleteTest,
+  deleteWorkspace,
   editStep,
   getRun,
   getTest,
   listRuns,
   listTests,
+  listWorkspaces,
+  migrate,
+  renameWorkspace,
+  sql,
   setSteps,
   startRun,
   subscribe,
@@ -25,6 +32,8 @@ import {
 } from "@agent-tester/core";
 import { z } from "zod";
 import { chat } from "./chat";
+
+await migrate();
 
 const app = new Hono();
 
@@ -37,12 +46,27 @@ app.onError((err, c) => {
 });
 
 app.get("/api/health", async (c) => {
-  try { await ready; return c.json({ ok: true, database: "connected" }); }
+  try { await sql`SELECT 1`; return c.json({ ok: true, database: "connected" }); }
   catch { return c.json({ ok: false, database: "unavailable" }, 503); }
 });
 
-app.get("/api/tests", async (c) => c.json(await listTests()));
-app.post("/api/tests", async (c) => c.json(await createTest(CreateTestBody.parse(await c.req.json())), 201));
+app.get("/api/workspaces", async (c) => c.json(await listWorkspaces()));
+app.post("/api/workspaces", async (c) => c.json(await createWorkspace(WorkspaceBody.parse(await c.req.json()).name), 201));
+app.patch("/api/workspaces/:wid", async (c) =>
+  c.json(await renameWorkspace(c.req.param("wid"), WorkspaceBody.parse(await c.req.json()).name)),
+);
+app.delete("/api/workspaces/:wid", async (c) => {
+  await deleteWorkspace(c.req.param("wid"));
+  return c.body(null, 204);
+});
+app.get("/api/workspaces/:wid/tests", async (c) => c.json(await listTests(c.req.param("wid"))));
+app.post("/api/workspaces/:wid/tests", async (c) =>
+  c.json(await createTest(c.req.param("wid"), CreateTestBody.parse(await c.req.json())), 201),
+);
+
+// Compatibility endpoints keep the existing client and MCP integrations on the Default workspace.
+app.get("/api/tests", async (c) => c.json(await listTests(DEFAULT_WORKSPACE_ID)));
+app.post("/api/tests", async (c) => c.json(await createTest(DEFAULT_WORKSPACE_ID, CreateTestBody.parse(await c.req.json())), 201));
 app.get("/api/tests/:id", async (c) => c.json(await getTest(c.req.param("id"))));
 app.patch("/api/tests/:id", async (c) =>
   c.json(await updateTest(c.req.param("id"), UpdateTestBody.parse(await c.req.json()), "web")),

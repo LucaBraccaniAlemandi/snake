@@ -29,19 +29,31 @@ const testId = { testId: z.string() };
 export function createServer() {
   const server = new McpServer({ name: "agent-tester", version: "0.1.0" });
 
+  const workspaceId = z.string().optional().describe('Workspace id; omit for the "default" Workspace');
+
+  server.registerTool(
+    "list_workspaces",
+    { description: "List Workspaces (named groups of tests, usually one per product)." },
+    async () => ok(await api("GET", "/api/workspaces")),
+  );
+  server.registerTool(
+    "create_workspace",
+    { description: "Create a Workspace to group tests for a product.", inputSchema: { name: z.string() } },
+    async (input) => ok(await api("POST", "/api/workspaces", input)),
+  );
   server.registerTool(
     "list_tests",
-    { description: "List all tests with their Starting URL and last run status." },
-    async () => ok(await api("GET", "/api/tests")),
+    { description: "List the tests of a Workspace with their Starting URL and last run status.", inputSchema: { workspaceId } },
+    async ({ workspaceId = "default" }) => ok(await api("GET", `/api/workspaces/${workspaceId}/tests`)),
   );
   server.registerTool(
     "create_test",
     {
       description: "Create an empty test for a web app. Then add steps with set_steps and run it with run_test.",
-      inputSchema: { name: z.string(), url: z.string().url().describe("Starting URL the test opens first") },
+      inputSchema: { workspaceId, name: z.string(), url: z.string().url().describe("Starting URL the test opens first") },
     },
-    async (input) => {
-      const test = (await api("POST", "/api/tests", input)) as { id: string };
+    async ({ workspaceId = "default", ...input }) => {
+      const test = (await api("POST", `/api/workspaces/${workspaceId}/tests`, input)) as { id: string };
       return ok(test, test.id);
     },
   );

@@ -22,8 +22,16 @@ export type RunStatus = z.infer<typeof RunStatus>;
 export const StepStatus = z.enum(["pending", "running", "passed", "failed", "skipped"]);
 export type StepStatus = z.infer<typeof StepStatus>;
 
+export const Workspace = z.object({
+  id: z.string(),
+  name: z.string(),
+  createdAt: z.string(),
+});
+export type Workspace = z.infer<typeof Workspace>;
+
 export const Test = z.object({
   id: z.string(),
+  workspaceId: z.string(),
   name: z.string(),
   url: z.string().url(),
   script: z.string(),
@@ -45,6 +53,7 @@ export type Test = z.infer<typeof Test>;
 
 export const TestListItem = z.object({
   id: z.string(),
+  workspaceId: z.string(),
   name: z.string(),
   url: z.string(),
   script: z.string(),
@@ -57,6 +66,7 @@ export type TestListItem = z.infer<typeof TestListItem>;
 
 export const StepResult = z.object({
   stepId: z.string(),
+  text: z.string(), // the Step's text when the Run executed
   status: StepStatus,
   error: z.string().optional(),
   screenshotPath: z.string().optional(),

@@ -6,7 +6,7 @@ export type RunStatus = "queued" | "running" | "passed" | "failed" | "error";
 export type StepStatus = "pending" | "running" | "passed" | "failed" | "skipped";
 export type Test = { id: string; name: string; url: string; script: string; steps: Step[]; metadata: TestMetadata; updatedAt: string };
 export type TestListItem = Test & { lastRunStatus: RunStatus | null };
-export type StepResult = { stepId: string; status: StepStatus; error?: string; screenshotPath?: string };
+export type StepResult = { stepId: string; text?: string; status: StepStatus; error?: string; screenshotPath?: string };
 export type RunSummary = { runId: string; status: RunStatus; passed: boolean; failedStep: { id: string; text: string } | null; error: string | null; screenshotUrl: string | null };
 export type Run = {
   id: string; testId: string; status: RunStatus; startedAt: string | null; finishedAt: string | null;

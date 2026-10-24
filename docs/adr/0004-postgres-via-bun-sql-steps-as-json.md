@@ -1,0 +1,3 @@
+# Postgres via Bun.sql, with Steps stored as JSON on the Test
+
+All state lives in Postgres (SQLite was dropped), accessed with Bun's built-in `Bun.sql` and plain SQL migrations in `server/core/migrations/` that run at startup. We rejected an ORM like Drizzle to avoid a new tool during a hackathon. The model is Workspace → Test → Steps, but Steps are a `jsonb` array on `tests` rather than their own table: a Test's Steps are always read, written and versioned as one ordered list (ADR-0001), so a table would only add position bookkeeping. Runs are rows, and their per-Step results are `jsonb` too. Each result keeps the Step's text as it was at run time, so history stays readable after edits.

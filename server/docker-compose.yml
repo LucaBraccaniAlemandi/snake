@@ -9,6 +9,7 @@ services:
     env_file: .env
     environment:
       DATA_DIR: /data
+      # /data holds run screenshots; all other state lives in Postgres.
       DATABASE_URL: postgres://agent:${POSTGRES_PASSWORD:-agent}@db:5432/agent_tester
     volumes:
       - server-data:/data
@@ -19,6 +20,7 @@ services:
     shm_size: 1gb # Chromium needs more shared memory than Docker's 64MB default
     restart: unless-stopped
 
+  # All server state (Workspaces, Tests, Runs). Migrations run when the server starts.
   db:
     image: postgres:17-alpine
     environment:

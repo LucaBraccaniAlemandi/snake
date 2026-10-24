@@ -2,11 +2,11 @@
 
 Chat-driven agentic e2e tests. The full spec is in [PROMPT.md](./PROMPT.md).
 
-Two independent projects, each with its own `package.json`, lockfile and `node_modules`.
+The repository contains two independent projects, each with its own package manifest and dependencies.
 
-## client/ (frontend)
+## Client
 
-React + Vite + Tailwind. Dev server on :5173, which proxies `/api` and `/artifacts` to the server on :3000.
+React + Vite + Tailwind. The workspace UI lives in `client/src/routes/WorkspacePages.tsx`; test cases and runs load from the API. Editing, deletion, and execution are persisted by the backend.
 
 ```sh
 cd client
@@ -14,30 +14,29 @@ bun install
 bun run dev
 ```
 
-- The workspace UI is in `src/routes/WorkspacePages.tsx`; cases and runs load from the API. Editing, deletion and execution are persisted by the backend.
-- The Vite dev server proxies `/api` and `/artifacts` to the API at :3000.
+The Vite dev server runs on :5173 and proxies `/api` and `/artifacts` to the API on :3000.
 
-## server/ (backend)
+## Server
 
-Bun workspace. Requires Bun ≥ 1.4 and Node ≥ 24.8 (Node runs the e2e/Playwright tests).
+Bun workspace. Requires Bun 1.4.2, Node ≥ 24.8 (for e2e/Playwright), and PostgreSQL.
 
 ```sh
 cd server
 bun install
-cp .env.example .env    # set ANTHROPIC_API_KEY
-docker compose up -d db # PostgreSQL :5432
-bun run dev             # api :3000, demo-shop :3002
+cp .env.example .env         # set ANTHROPIC_API_KEY; DATABASE_URL points at the Docker Postgres
+docker compose up -d db      # Postgres only, on 127.0.0.1:5432
+bun run dev                  # api :3000 (runs migrations on start), demo-shop :3002
 ```
+
+Data model: **Workspace → Test → Steps**. Steps and test metadata are stored on each Test; Runs retain a test snapshot and per-step results. Versioned SQL migrations live in `server/core/migrations/`. A "Default" Workspace always exists and backs the compatibility routes used by the client.
 
 ```
 server/api/        Hono backend: REST, SSE, chat (/api/chat), runs, /artifacts
-server/core/       zod schemas + REST contract, compile, PostgreSQL storage, runner, tool definitions
-server/runner/     the e2e project every Run executes in (e2e@0.21.3, @e2e-dev/web@0.15.3)
+server/core/       schemas + REST contract, compile, Postgres storage + migrations, runner, tool definitions
+server/runner/     the e2e project every Run executes in
 server/mcp/        MCP stdio server, thin REST client of api
-server/demo-shop/  demo target on :3002 (coupon field hidden behind "Have a code?")
+server/demo-shop/  demo target on :3002
 ```
-
-The API applies the versioned initial schema automatically when it starts. Set `DATABASE_URL` to connect to a local PostgreSQL instance; the example uses `agent:agent` for local development. The full route list is at the top of `server/core/src/api.ts`.
 
 ### Docker
 
@@ -47,19 +46,11 @@ cp .env.example .env         # set ANTHROPIC_API_KEY (and POSTGRES_PASSWORD)
 docker compose up -d --build  # api :3000, demo shop :3002, postgres on 127.0.0.1:5432
 ```
 
-- **Image:** `server/Dockerfile` builds on `node:24` and adds Bun and the Chromium headless shell at the exact version `@e2e-dev/web` pins.
-- **Volumes:** `server-data` holds screenshots and artifacts, `replay-cache` holds e2e's Replay Cache, and `pg-data` persists PostgreSQL.
-- **Postgres:** the API uses `DATABASE_URL` and runs its initial schema migration on startup. Set `POSTGRES_PASSWORD` in `.env` for deployments beyond local development.
+- **Image:** `server/Dockerfile` builds on `node:24` and adds Bun and the Chromium headless shell required by `@e2e-dev/web`.
+- **Volumes:** `pg-data` holds Postgres, `server-data` holds screenshots, and `replay-cache` holds e2e's Replay Cache.
+- **Postgres:** holds all application state. Compose sets `DATABASE_URL`; SQL migrations run when the server starts.
 - **Reachable URLs:** tests run inside the container, so a Starting URL must be reachable from there. `http://localhost:3002` (the demo shop in the same container) and public URLs work. Your host's `localhost` apps don't.
 
-### MCP (Claude Code)
+### MCP
 
-`server/.mcp.json` registers the stdio server, so open Claude Code in `server/` with the API running. To add it to Claude Code manually:
-
-```sh
-claude mcp add agent-tester -e SERVER_URL=http://localhost:3000 -e WEB_URL=http://localhost:5173 -- bun server/mcp/src/stdio.ts
-```
-
-Tools: `list_tests`, `create_test`, `get_test`, `set_steps`, `edit_step`, `run_test` and `get_run`. Edits made over MCP show up live in the web UI.
-
-PROMPT.md still uses the old layout: `apps/web` is now `client/`, and the other `apps/*` and `packages/*` now live under `server/`. Notes on the real e2e API are in [docs/e2e-api-notes.md](./docs/e2e-api-notes.md).
+`server/.mcp.json` registers the stdio server, so open Claude Code in `server/` with the API running. Tools include workspace and test CRUD, step editing, execution, and run inspection.
