@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun --env-file=../.env --watch src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "start": "bun src/index.ts"
   },
   "dependencies": {
     "@agent-tester/core": "workspace:*",

@@ -11,6 +11,7 @@ Small choices made while building. Big ones are in `docs/adr/`, terms in `GLOSSA
 - **Repo layout:** `client/` and `server/` are independent projects. The API types are duplicated in `server/core/src/{schema,api}.ts` and `client/src/types.ts`, kept in sync by hand.
 - **Starting URL:** a field on the Test, compiled to `await app.open(url)`. It's never a Step.
 - **Expectations:** only "text is visible" (`expect(screen.getByText(value)).toBeVisible()`) and "URL contains" (`target: "url"`, `expect(browser).toHaveURL(...)`).
+- **Docker:** a single image, `node:24` plus Bun plus a pinned Chromium, runs the API and the demo shop together, so tests can open `http://localhost:3002`. `docker-compose.yml` already includes Postgres for the planned move off SQLite, but the server doesn't use it yet.
 - **Extra routes:** `PATCH /api/tests/:id` (rename or change the Starting URL) and `DELETE /api/tests/:id`.
 - **Run results:** `POST /run` returns 202 `{ runId }`. The UI follows the run through the `run-started` and `run-finished` SSE events. `run-finished` carries every Step Result, with `skipped` for steps after a failure.
 - **Concurrent writes:** the last write wins, and every write is broadcast over SSE. A Run executes a snapshot of the Steps taken when it starts.

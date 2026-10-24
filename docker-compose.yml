@@ -1,0 +1,41 @@
+services:
+  server:
+    build: ./server
+    ports:
+      - "3000:3000" # API
+      - "3002:3002" # demo shop (runs in the same container so tests can open http://localhost:3002)
+    env_file: ./server/.env
+    environment:
+      DATA_DIR: /data
+      # Not used yet: the server still stores data in SQLite under /data.
+      DATABASE_URL: postgres://agent:agent@db:5432/agent_tester
+    volumes:
+      - server-data:/data
+      - replay-cache:/app/runner/.cache
+    depends_on:
+      db:
+        condition: service_healthy
+    shm_size: 1gb # Chromium needs more shared memory than Docker's 64MB default
+    restart: unless-stopped
+
+  # Ready for the planned move from SQLite to Postgres.
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agent
+      POSTGRES_DB: agent_tester
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d agent_tester"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  server-data:
+  replay-cache:
+  pg-data:

@@ -38,6 +38,18 @@ server/demo-shop/  demo target on :3002 (coupon field hidden behind "Have a code
 
 The full route list is at the top of `server/core/src/api.ts`. The REST/SSE types live in `server/core/src/schema.ts` and `api.ts`, and `client/src/types.ts` mirrors them. **Keep the two in sync by hand.**
 
+### Docker
+
+```sh
+cp server/.env.example server/.env   # set ANTHROPIC_API_KEY
+docker compose up -d --build         # api :3000, demo shop :3002, postgres :5432
+```
+
+- **Image:** `server/Dockerfile` builds on `node:24` and adds Bun and the Chromium headless shell at the exact version `@e2e-dev/web` pins.
+- **Volumes:** `server-data` holds the SQLite database and screenshots, and `replay-cache` holds e2e's Replay Cache.
+- **Postgres:** the service is already in `docker-compose.yml`, with `DATABASE_URL` passed to the server, but the server doesn't use it yet. It still stores everything in SQLite.
+- **Reachable URLs:** tests run inside the container, so a Starting URL must be reachable from there. `http://localhost:3002` (the demo shop in the same container) and public URLs work. Your host's `localhost` apps don't.
+
 ### MCP (Claude Code)
 
 `.mcp.json` at the repo root registers the stdio server, so open Claude Code in this repo with the API running. To add it to Claude Code manually:
