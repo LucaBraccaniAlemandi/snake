@@ -35,3 +35,7 @@ test("input data and expected results are executable and mapped to their origina
   expect(edited).not.toContain("999 mugs");
   expect(edited).toContain('await agent.assert("Cart is empty")');
 });
+
+test("opening the app preserves client-side hash routing", () => {
+  expect(compile({ ...t, url: "https://demo.playwright.dev/todomvc/#/" })).toContain('await app.open("https://demo.playwright.dev/todomvc/#/");');
+});
