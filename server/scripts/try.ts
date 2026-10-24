@@ -9,7 +9,7 @@ if (!prompt) {
 
 const testId =
   existingId ??
-  ((await (await fetch(`${API}/api/tests`, { method: "POST", body: JSON.stringify({ name: prompt.slice(0, 60), url }) })).json()) as { id: string }).id;
+  ((await (await fetch(`${API}/api/workspaces/${process.env.WORKSPACE ?? "default"}/tests`, { method: "POST", body: JSON.stringify({ name: prompt.slice(0, 60), url }) })).json()) as { id: string }).id;
 console.log(`Test ${testId} (${url})\n`);
 
 const res = await fetch(`${API}/api/chat`, {

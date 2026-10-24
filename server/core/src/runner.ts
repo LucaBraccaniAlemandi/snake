@@ -1,56 +1,61 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { compile, stepLines } from "./compile";
-import { DATA_DIR, db, newId } from "./db";
+import { DATA_DIR, iso, newId, sql } from "./db";
+import { NotFound } from "./errors";
 import { publish } from "./events";
 import type { Run, RunStatus, RunSummary, StepResult, StepStatus, Test } from "./schema";
-import { NotFound, getTest } from "./tests";
+import { getTest } from "./tests";
 
 const RUNNER_DIR = resolve(import.meta.dir, "../../runner");
 const E2E_BIN = join(RUNNER_DIR, "node_modules/.bin/e2e");
 const RUN_TIMEOUT_MS = 5 * 60_000;
 
 type RunRow = {
-  id: string; test_id: string; status: RunStatus; started_at: string | null; finished_at: string | null;
-  step_results: string; summary: string | null;
+  id: string; test_id: string; status: RunStatus; started_at: Date | null; finished_at: Date | null;
+  step_results: StepResult[]; summary: RunSummary | null;
 };
 
 const toRun = (r: RunRow): Run => ({
-  id: r.id, testId: r.test_id, status: r.status, startedAt: r.started_at, finishedAt: r.finished_at,
-  stepResults: JSON.parse(r.step_results),
+  id: r.id, testId: r.test_id, status: r.status, startedAt: iso(r.started_at), finishedAt: iso(r.finished_at),
+  stepResults: r.step_results,
 });
 
-export function getRun(runId: string): Run & { summary: RunSummary | null } {
-  const row = db.query("SELECT * FROM runs WHERE id = ?").get(runId) as RunRow | null;
+export async function getRun(runId: string): Promise<Run & { summary: RunSummary | null }> {
+  const [row] = await sql`SELECT * FROM runs WHERE id = ${runId}`;
   if (!row) throw new NotFound(`Run ${runId} not found`);
-  return { ...toRun(row), summary: row.summary ? JSON.parse(row.summary) : null };
+  return { ...toRun(row), summary: row.summary };
 }
 
 // One Run at a time; a Test that is already queued or running gets its existing Run back.
 let queue: Promise<unknown> = Promise.resolve();
 const active = new Map<string, { runId: string; done: Promise<RunSummary> }>();
 
-export function startRun(testId: string): { runId: string; done: Promise<RunSummary> } {
-  const existing = active.get(testId);
-  if (existing) return existing;
+export async function startRun(testId: string): Promise<{ runId: string; done: Promise<RunSummary> }> {
+  if (active.has(testId)) return active.get(testId)!;
+  const test = await getTest(testId); // snapshot: later edits don't affect this Run
+  if (active.has(testId)) return active.get(testId)!; // another request won the race while we awaited
 
-  const test = getTest(testId); // snapshot: later edits don't affect this Run
   const runId = newId("r");
-  const pending: StepResult[] = test.steps.map((s) => ({ stepId: s.id, status: "pending" }));
-  db.query("INSERT INTO runs (id, test_id, status, step_results, created_at) VALUES (?, ?, 'queued', ?, ?)")
-    .run(runId, testId, JSON.stringify(pending), new Date().toISOString());
+  const pending: StepResult[] = test.steps.map((s) => ({ stepId: s.id, text: s.text, status: "pending" }));
+  const inserted = sql`INSERT INTO runs (id, test_id, status, step_results) VALUES (${runId}, ${testId}, 'queued', ${JSON.stringify(pending)}::text::jsonb)`;
 
-  const done = (queue = queue.then(() => execute(test, runId)).finally(() => active.delete(testId))) as Promise<RunSummary>;
+  const done = (queue = queue
+    .then(async () => {
+      await inserted;
+      return execute(test, runId);
+    })
+    .finally(() => active.delete(testId))) as Promise<RunSummary>;
   done.catch((err) => console.error(`Run ${runId} crashed`, err));
   const entry = { runId, done };
   active.set(testId, entry);
+  await inserted;
   return entry;
 }
 
 async function execute(test: Test, runId: string): Promise<RunSummary> {
-  const startedAt = new Date().toISOString();
-  db.query("UPDATE runs SET status = 'running', started_at = ? WHERE id = ?").run(startedAt, runId);
-  publish(test.id, { type: "run-started", run: toRun(db.query("SELECT * FROM runs WHERE id = ?").get(runId) as RunRow) });
+  const [started] = await sql`UPDATE runs SET status = 'running', started_at = now() WHERE id = ${runId} RETURNING *`;
+  publish(test.id, { type: "run-started", run: toRun(started) });
 
   const script = compile(test);
   writeFileSync(join(RUNNER_DIR, "tests", `${test.id}.e2e.ts`), script);
@@ -86,10 +91,9 @@ async function execute(test: Test, runId: string): Promise<RunSummary> {
     screenshotUrl: failed?.screenshotPath ?? null,
   };
 
-  db.query("UPDATE runs SET status = ?, finished_at = ?, step_results = ?, summary = ? WHERE id = ?")
-    .run(status, new Date().toISOString(), JSON.stringify(stepResults), JSON.stringify(summary), runId);
+  await sql`UPDATE runs SET status = ${status}, finished_at = now(), step_results = ${JSON.stringify(stepResults)}::text::jsonb, summary = ${JSON.stringify(summary)}::text::jsonb WHERE id = ${runId}`;
   rmSync(join(RUNNER_DIR, output), { recursive: true, force: true });
-  publish(test.id, { type: "run-finished", run: getRun(runId), status });
+  publish(test.id, { type: "run-finished", run: await getRun(runId), status });
   return summary;
 }
 
@@ -99,7 +103,7 @@ type Attempt = { status: string; error?: { message?: string }; artifacts?: { kin
 function readReport(test: Test, script: string, outputDir: string, runId: string, stderr: string) {
   const fail = (error: string) => ({
     status: "error" as RunStatus,
-    stepResults: test.steps.map((s): StepResult => ({ stepId: s.id, status: "skipped" })),
+    stepResults: test.steps.map((s): StepResult => ({ stepId: s.id, text: s.text, status: "skipped" })),
     error,
   });
 
@@ -130,10 +134,10 @@ function readReport(test: Test, script: string, outputDir: string, runId: string
 
   const stepResults = test.steps.map((step): StepResult => {
     const reported = byStep.get(step.id);
-    if (!reported?.length) return { stepId: step.id, status: "skipped" }; // steps after a failure aren't recorded
+    if (!reported?.length) return { stepId: step.id, text: step.text, status: "skipped" }; // steps after a failure aren't recorded
     const failed = reported.find((s) => s.status !== "passed");
-    if (!failed) return { stepId: step.id, status: "passed" };
-    return { stepId: step.id, status: "failed" as StepStatus, error: failed.error?.message?.slice(0, 500), screenshotPath: screenshotUrl };
+    if (!failed) return { stepId: step.id, text: step.text, status: "passed" };
+    return { stepId: step.id, text: step.text, status: "failed" as StepStatus, error: failed.error?.message?.slice(0, 500), screenshotPath: screenshotUrl };
   });
 
   const status: RunStatus = run.status === "passed" ? "passed" : run.status === "failed" ? "failed" : "error";

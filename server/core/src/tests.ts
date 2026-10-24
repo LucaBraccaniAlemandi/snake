@@ -1,65 +1,74 @@
 import type { EditStepBody } from "./api";
 import { compile } from "./compile";
-import { db, newId } from "./db";
+import { iso, newId, sql } from "./db";
+import { BadRequest, NotFound } from "./errors";
 import { publish } from "./events";
-import type { RunStatus, Step, Test, TestListItem } from "./schema";
+import type { Step, Test, TestListItem } from "./schema";
+import { getWorkspace, removeArtifacts } from "./workspaces";
 
+export { BadRequest, NotFound };
 export type Source = "web" | "chat" | "mcp";
 
-export class NotFound extends Error {}
-export class BadRequest extends Error {}
-
-type TestRow = { id: string; name: string; url: string; steps: string; updated_at: string };
+type TestRow = { id: string; workspace_id: string; name: string; url: string; steps: Step[]; updated_at: Date };
 
 function toTest(row: TestRow): Test {
-  const steps: Step[] = JSON.parse(row.steps);
-  return { id: row.id, name: row.name, url: row.url, steps, script: compile({ id: row.id, url: row.url, steps }), updatedAt: row.updated_at };
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    name: row.name,
+    url: row.url,
+    steps: row.steps,
+    script: compile({ id: row.id, url: row.url, steps: row.steps }),
+    updatedAt: iso(row.updated_at)!,
+  };
 }
 
-export function listTests(): TestListItem[] {
-  return db
-    .query(
-      `SELECT t.id, t.name, t.url, t.updated_at,
-         (SELECT status FROM runs r WHERE r.test_id = t.id ORDER BY r.created_at DESC LIMIT 1) AS last_status
-       FROM tests t ORDER BY t.updated_at DESC`,
-    )
-    .all()
-    .map((r: any) => ({ id: r.id, name: r.name, url: r.url, lastRunStatus: (r.last_status as RunStatus) ?? null, updatedAt: r.updated_at }));
+export async function listTests(workspaceId: string): Promise<TestListItem[]> {
+  await getWorkspace(workspaceId);
+  const rows = await sql`
+    SELECT t.id, t.workspace_id, t.name, t.url, t.updated_at,
+      (SELECT status FROM runs r WHERE r.test_id = t.id ORDER BY r.created_at DESC LIMIT 1) AS last_status
+    FROM tests t WHERE t.workspace_id = ${workspaceId} ORDER BY t.updated_at DESC`;
+  return rows.map((r: any) => ({
+    id: r.id, workspaceId: r.workspace_id, name: r.name, url: r.url, lastRunStatus: r.last_status ?? null, updatedAt: iso(r.updated_at)!,
+  }));
 }
 
-export function getTest(id: string): Test {
-  const row = db.query("SELECT * FROM tests WHERE id = ?").get(id) as TestRow | null;
+export async function getTest(id: string): Promise<Test> {
+  const [row] = await sql`SELECT * FROM tests WHERE id = ${id}`;
   if (!row) throw new NotFound(`Test ${id} not found`);
   return toTest(row);
 }
 
-export function createTest(input: { name: string; url: string }): Test {
-  const id = newId("t");
-  db.query("INSERT INTO tests (id, name, url, steps, updated_at) VALUES (?, ?, ?, '[]', ?)").run(id, input.name, input.url, new Date().toISOString());
-  return getTest(id);
+export async function createTest(workspaceId: string, input: { name: string; url: string }): Promise<Test> {
+  await getWorkspace(workspaceId);
+  const [row] = await sql`
+    INSERT INTO tests (id, workspace_id, name, url) VALUES (${newId("t")}, ${workspaceId}, ${input.name}, ${input.url}) RETURNING *`;
+  return toTest(row);
 }
 
-export function updateTest(id: string, patch: { name?: string; url?: string }, source: Source): Test {
-  const t = getTest(id);
-  db.query("UPDATE tests SET name = ?, url = ?, updated_at = ? WHERE id = ?").run(patch.name ?? t.name, patch.url ?? t.url, new Date().toISOString(), id);
+export async function updateTest(id: string, patch: { name?: string; url?: string }, source: Source): Promise<Test> {
+  const t = await getTest(id);
+  await sql`UPDATE tests SET name = ${patch.name ?? t.name}, url = ${patch.url ?? t.url}, updated_at = now() WHERE id = ${id}`;
   return broadcast(id, source);
 }
 
-export function deleteTest(id: string) {
-  getTest(id);
-  db.query("DELETE FROM runs WHERE test_id = ?").run(id);
-  db.query("DELETE FROM tests WHERE id = ?").run(id);
+export async function deleteTest(id: string) {
+  await getTest(id);
+  const runs = await sql`SELECT id FROM runs WHERE test_id = ${id}`;
+  await sql`DELETE FROM tests WHERE id = ${id}`; // cascades to runs
+  removeArtifacts(runs.map((r: { id: string }) => r.id));
 }
 
-export function setSteps(id: string, steps: Array<Omit<Step, "id"> & { id?: string }>, source: Source): Test {
-  getTest(id);
+export async function setSteps(id: string, steps: Array<Omit<Step, "id"> & { id?: string }>, source: Source): Promise<Test> {
+  await getTest(id);
   const withIds: Step[] = steps.map((s) => ({ ...s, id: s.id || newId("s") }));
-  db.query("UPDATE tests SET steps = ?, updated_at = ? WHERE id = ?").run(JSON.stringify(withIds), new Date().toISOString(), id);
+  await sql`UPDATE tests SET steps = ${JSON.stringify(withIds)}::text::jsonb, updated_at = now() WHERE id = ${id}`;
   return broadcast(id, source);
 }
 
-export function editStep(id: string, edit: EditStepBody, source: Source): Test {
-  const steps = [...getTest(id).steps];
+export async function editStep(id: string, edit: EditStepBody, source: Source): Promise<Test> {
+  const steps = [...(await getTest(id)).steps];
   const index = (stepId?: string) => {
     const i = steps.findIndex((s) => s.id === stepId);
     if (i < 0) throw new BadRequest(`Step ${stepId} not found`);
@@ -94,8 +103,8 @@ export function editStep(id: string, edit: EditStepBody, source: Source): Test {
   return setSteps(id, steps, source);
 }
 
-function broadcast(id: string, source: Source): Test {
-  const test = getTest(id);
+async function broadcast(id: string, source: Source): Promise<Test> {
+  const test = await getTest(id);
   publish(id, { type: "test-updated", test, source });
   return test;
 }

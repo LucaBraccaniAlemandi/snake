@@ -4,6 +4,7 @@ export * from "./api";
 export * from "./compile";
 export * from "./events";
 export * from "./tests";
+export * from "./workspaces";
 export * from "./runner";
 export * from "./tools";
-export { DATA_DIR } from "./db";
+export { DATA_DIR, migrate, sql } from "./db";

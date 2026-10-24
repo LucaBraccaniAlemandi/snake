@@ -19,18 +19,21 @@ bun run dev
 
 ## server/ (backend)
 
-Bun workspace. Requires Bun ≥ 1.4 and Node ≥ 24.8 (Node runs the e2e/Playwright tests).
+Bun workspace. Requires Bun 1.4.2 and Node ≥ 24.8 (Node runs the e2e/Playwright tests), plus Postgres.
 
 ```sh
 cd server
 bun install
-cp .env.example .env    # set ANTHROPIC_API_KEY
-bun run dev             # api :3000, demo-shop :3002
+cp .env.example .env         # set ANTHROPIC_API_KEY; DATABASE_URL points at the Docker Postgres
+docker compose up -d db      # Postgres only, on 127.0.0.1:5432
+bun run dev                  # api :3000 (runs migrations on start), demo-shop :3002
 ```
+
+Data model: **Workspace → Test → Steps**. Steps are a JSON array on the Test, and Runs keep per-Step results as JSON (ADR-0004). Migrations live in `server/core/migrations/`. A "Default" Workspace always exists.
 
 ```
 server/api/        Hono backend: REST, SSE, chat (/api/chat), runs, /artifacts
-server/core/       zod schemas + REST contract, compile, SQLite storage, runner, tool definitions
+server/core/       zod schemas + REST contract, compile, Postgres storage + migrations, runner, tool definitions
 server/runner/     the e2e project every Run executes in (e2e@0.21.3, @e2e-dev/web@0.15.3)
 server/mcp/        MCP stdio server, thin REST client of api
 server/demo-shop/  demo target on :3002 (coupon field hidden behind "Have a code?")
@@ -47,8 +50,8 @@ docker compose up -d --build  # api :3000, demo shop :3002, postgres on 127.0.0.
 ```
 
 - **Image:** `server/Dockerfile` builds on `node:24` and adds Bun and the Chromium headless shell at the exact version `@e2e-dev/web` pins.
-- **Volumes:** `server-data` holds the SQLite database and screenshots, and `replay-cache` holds e2e's Replay Cache.
-- **Postgres:** the service is already in `server/docker-compose.yml`, with `DATABASE_URL` passed to the server, but the server doesn't use it yet. It still stores everything in SQLite.
+- **Volumes:** `pg-data` holds Postgres, `server-data` holds screenshots, and `replay-cache` holds e2e's Replay Cache.
+- **Postgres:** holds all state. The server gets `DATABASE_URL` from compose and runs migrations on start.
 - **Reachable URLs:** tests run inside the container, so a Starting URL must be reachable from there. `http://localhost:3002` (the demo shop in the same container) and public URLs work. Your host's `localhost` apps don't.
 
 ### MCP (Claude Code)
@@ -59,6 +62,6 @@ docker compose up -d --build  # api :3000, demo shop :3002, postgres on 127.0.0.
 claude mcp add agent-tester -e SERVER_URL=http://localhost:3000 -e WEB_URL=http://localhost:5173 -- bun server/mcp/src/stdio.ts
 ```
 
-Tools: `list_tests`, `create_test`, `get_test`, `set_steps`, `edit_step`, `run_test` and `get_run`. Edits made over MCP show up live in the web UI.
+Tools: `list_workspaces`, `create_workspace`, `list_tests`, `create_test`, `get_test`, `set_steps`, `edit_step`, `run_test` and `get_run`. Edits made over MCP show up live in the web UI.
 
 PROMPT.md still uses the old layout: `apps/web` is now `client/`, and the other `apps/*` and `packages/*` now live under `server/`. Notes on the real e2e API are in [docs/e2e-api-notes.md](./docs/e2e-api-notes.md).

@@ -16,7 +16,7 @@
     "start": "concurrently --kill-others -n api,shop -c green,yellow \"bun run --cwd api start\" \"bun run --cwd demo-shop start\""
   },
   "devDependencies": {
-    "bun-types": "^1.4.4",
+    "bun-types": "1.4.2",
     "concurrently": "^10.0.6",
     "typescript": "^7.0.2"
   }

@@ -8,12 +8,18 @@ import {
   EditStepBody,
   NotFound,
   PutStepsBody,
+  WorkspaceBody,
   createTest,
+  createWorkspace,
   deleteTest,
+  deleteWorkspace,
   editStep,
   getRun,
   getTest,
   listTests,
+  listWorkspaces,
+  migrate,
+  renameWorkspace,
   setSteps,
   startRun,
   subscribe,
@@ -22,6 +28,8 @@ import {
 } from "@agent-tester/core";
 import { z } from "zod";
 import { chat } from "./chat";
+
+await migrate();
 
 const app = new Hono();
 
@@ -35,14 +43,26 @@ app.onError((err, c) => {
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 
-app.get("/api/tests", (c) => c.json(listTests()));
-app.post("/api/tests", async (c) => c.json(createTest(CreateTestBody.parse(await c.req.json())), 201));
-app.get("/api/tests/:id", (c) => c.json(getTest(c.req.param("id"))));
-app.patch("/api/tests/:id", async (c) =>
-  c.json(updateTest(c.req.param("id"), CreateTestBody.partial().parse(await c.req.json()), "web")),
+app.get("/api/workspaces", async (c) => c.json(await listWorkspaces()));
+app.post("/api/workspaces", async (c) => c.json(await createWorkspace(WorkspaceBody.parse(await c.req.json()).name), 201));
+app.patch("/api/workspaces/:wid", async (c) =>
+  c.json(await renameWorkspace(c.req.param("wid"), WorkspaceBody.parse(await c.req.json()).name)),
 );
-app.delete("/api/tests/:id", (c) => {
-  deleteTest(c.req.param("id"));
+app.delete("/api/workspaces/:wid", async (c) => {
+  await deleteWorkspace(c.req.param("wid"));
+  return c.body(null, 204);
+});
+app.get("/api/workspaces/:wid/tests", async (c) => c.json(await listTests(c.req.param("wid"))));
+app.post("/api/workspaces/:wid/tests", async (c) =>
+  c.json(await createTest(c.req.param("wid"), CreateTestBody.parse(await c.req.json())), 201),
+);
+
+app.get("/api/tests/:id", async (c) => c.json(await getTest(c.req.param("id"))));
+app.patch("/api/tests/:id", async (c) =>
+  c.json(await updateTest(c.req.param("id"), CreateTestBody.partial().parse(await c.req.json()), "web")),
+);
+app.delete("/api/tests/:id", async (c) => {
+  await deleteTest(c.req.param("id"));
   return c.body(null, 204);
 });
 
@@ -51,24 +71,24 @@ const source = (c: { req: { header: (k: string) => string | undefined } }) =>
   c.req.header("x-source") === "mcp" ? "mcp" : "web";
 
 app.put("/api/tests/:id/steps", async (c) =>
-  c.json(setSteps(c.req.param("id"), PutStepsBody.parse(await c.req.json()).steps, source(c))),
+  c.json(await setSteps(c.req.param("id"), PutStepsBody.parse(await c.req.json()).steps, source(c))),
 );
 app.post("/api/tests/:id/steps/edit", async (c) =>
-  c.json(editStep(c.req.param("id"), EditStepBody.parse(await c.req.json()), source(c))),
+  c.json(await editStep(c.req.param("id"), EditStepBody.parse(await c.req.json()), source(c))),
 );
 
 app.post("/api/tests/:id/run", async (c) => {
-  const { runId, done } = startRun(c.req.param("id"));
+  const { runId, done } = await startRun(c.req.param("id"));
   if (c.req.query("wait") === "true") return c.json(await done);
   return c.json({ runId }, 202);
 });
 app.post("/api/chat", async (c) => chat(await c.req.json()));
-app.get("/api/runs/:runId", (c) => c.json(getRun(c.req.param("runId"))));
+app.get("/api/runs/:runId", async (c) => c.json(await getRun(c.req.param("runId"))));
 app.use("/artifacts/*", serveStatic({ root: `${DATA_DIR}/runs`, rewriteRequestPath: (p) => p.replace(/^\/artifacts/, "") }));
 
-app.get("/api/tests/:id/events", (c) => {
+app.get("/api/tests/:id/events", async (c) => {
   const id = c.req.param("id");
-  getTest(id);
+  await getTest(id);
   return streamSSE(c, async (stream) => {
     const queue: TestEvent[] = [];
     let wake: (() => void) | undefined;

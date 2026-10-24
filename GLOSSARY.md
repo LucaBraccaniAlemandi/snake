@@ -4,6 +4,10 @@ A tool where testers describe end-to-end tests in plain English, refine them as 
 
 ## Tests
 
+**Workspace**:
+A named group of Tests, usually for one product. It has no members or permissions: everyone sees every Workspace.
+_Avoid_: Project, team, tenant, organization
+
 **Test**:
 A named, runnable scenario against one web app, made of a Starting URL and an ordered list of Steps.
 _Avoid_: Spec, scenario, test case
