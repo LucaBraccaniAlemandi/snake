@@ -13,7 +13,8 @@ export const Step = z.object({
 });
 export type Step = z.infer<typeof Step>;
 
-export const RunStatus = z.enum(["queued", "running", "passed", "failed"]);
+// "error" = infra/model-provider problem (e2e exit 3), not a test failure; don't auto-fix it.
+export const RunStatus = z.enum(["queued", "running", "passed", "failed", "error"]);
 export type RunStatus = z.infer<typeof RunStatus>;
 
 export const StepStatus = z.enum(["pending", "running", "passed", "failed", "skipped"]);
