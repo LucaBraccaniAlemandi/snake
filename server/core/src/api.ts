@@ -19,7 +19,8 @@ import { Step, type Run, type RunStatus, type StepStatus, type Test } from "./sc
 export const CreateTestBody = z.object({ name: z.string().min(1), url: z.string().url() });
 export type CreateTestBody = z.infer<typeof CreateTestBody>;
 
-export const PutStepsBody = z.object({ steps: z.array(Step) });
+// id may be omitted for new steps; the server assigns one.
+export const PutStepsBody = z.object({ steps: z.array(Step.extend({ id: z.string().optional() })) });
 export type PutStepsBody = z.infer<typeof PutStepsBody>;
 
 export const EditStepBody = z.object({

@@ -9,7 +9,7 @@
     "runner"
   ],
   "scripts": {
-    "dev": "concurrently -n api,mcp,shop -c green,magenta,yellow \"bun run --cwd api dev\" \"bun run --cwd mcp dev\" \"bun run --cwd demo-shop dev\"",
+    "dev": "concurrently -n api,shop -c green,yellow \"bun run --cwd api dev\" \"bun run --cwd demo-shop dev\"",
     "mcp:stdio": "bun mcp/src/stdio.ts",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun test"
