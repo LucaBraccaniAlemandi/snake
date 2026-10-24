@@ -1,5 +1,5 @@
 {
-  "name": "@agent-tester/server",
+  "name": "@agent-tester/api",
   "private": true,
   "type": "module",
   "scripts": {

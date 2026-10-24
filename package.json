@@ -1,11 +1,16 @@
 {
   "name": "agent-tester",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "client",
+    "server/*",
+    "shared"
+  ],
   "scripts": {
-    "dev": "concurrently -n web,server,mcp,shop -c cyan,green,magenta,yellow \"bun run --cwd apps/web dev\" \"bun run --cwd apps/server dev\" \"bun run --cwd apps/mcp dev\" \"bun run --cwd apps/demo-shop dev\"",
-    "dev:web": "bun run --cwd apps/web dev",
-    "mcp:stdio": "bun apps/mcp/src/stdio.ts",
+    "dev": "concurrently -n client,api,mcp,shop -c cyan,green,magenta,yellow \"bun run --cwd client dev\" \"bun run --cwd server/api dev\" \"bun run --cwd server/mcp dev\" \"bun run --cwd server/demo-shop dev\"",
+    "dev:client": "bun run --cwd client dev",
+    "dev:server": "concurrently -n api,mcp,shop -c green,magenta,yellow \"bun run --cwd server/api dev\" \"bun run --cwd server/mcp dev\" \"bun run --cwd server/demo-shop dev\"",
+    "mcp:stdio": "bun server/mcp/src/stdio.ts",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun test"
   },

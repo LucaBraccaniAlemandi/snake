@@ -10,22 +10,8 @@
         "typescript": "^7.0.2",
       },
     },
-    "apps/demo-shop": {
-      "name": "@agent-tester/demo-shop",
-    },
-    "apps/mcp": {
-      "name": "@agent-tester/mcp",
-    },
-    "apps/server": {
-      "name": "@agent-tester/server",
-      "dependencies": {
-        "@agent-tester/core": "workspace:*",
-        "@agent-tester/shared": "workspace:*",
-        "hono": "^4.13.13",
-      },
-    },
-    "apps/web": {
-      "name": "@agent-tester/web",
+    "client": {
+      "name": "@agent-tester/client",
       "dependencies": {
         "@agent-tester/shared": "workspace:*",
         "react": "^19.3.1",
@@ -41,10 +27,24 @@
         "vite": "^8.3.5",
       },
     },
-    "packages/core": {
+    "server/api": {
+      "name": "@agent-tester/api",
+      "dependencies": {
+        "@agent-tester/core": "workspace:*",
+        "@agent-tester/shared": "workspace:*",
+        "hono": "^4.13.13",
+      },
+    },
+    "server/core": {
       "name": "@agent-tester/core",
     },
-    "packages/shared": {
+    "server/demo-shop": {
+      "name": "@agent-tester/demo-shop",
+    },
+    "server/mcp": {
+      "name": "@agent-tester/mcp",
+    },
+    "shared": {
       "name": "@agent-tester/shared",
       "dependencies": {
         "zod": "^4.6.7",
@@ -52,17 +52,17 @@
     },
   },
   "packages": {
-    "@agent-tester/core": ["@agent-tester/core@workspace:packages/core"],
+    "@agent-tester/api": ["@agent-tester/api@workspace:server/api"],
 
-    "@agent-tester/demo-shop": ["@agent-tester/demo-shop@workspace:apps/demo-shop"],
+    "@agent-tester/client": ["@agent-tester/client@workspace:client"],
 
-    "@agent-tester/mcp": ["@agent-tester/mcp@workspace:apps/mcp"],
+    "@agent-tester/core": ["@agent-tester/core@workspace:server/core"],
 
-    "@agent-tester/server": ["@agent-tester/server@workspace:apps/server"],
+    "@agent-tester/demo-shop": ["@agent-tester/demo-shop@workspace:server/demo-shop"],
 
-    "@agent-tester/shared": ["@agent-tester/shared@workspace:packages/shared"],
+    "@agent-tester/mcp": ["@agent-tester/mcp@workspace:server/mcp"],
 
-    "@agent-tester/web": ["@agent-tester/web@workspace:apps/web"],
+    "@agent-tester/shared": ["@agent-tester/shared@workspace:shared"],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 
