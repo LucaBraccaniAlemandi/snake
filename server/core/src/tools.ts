@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { EditStepBody } from "./api";
-import { StepType } from "./schema";
+import { ExecutionEngine, StepType } from "./schema";
 
 // Tool names, descriptions and inputs shared by the web chat (api) and the MCP server.
 // Chat tools are bound to the open Test, so their inputs omit testId; MCP adds it.
@@ -38,10 +38,10 @@ ${STEP_RULES}`,
     input: EditStepBody,
   },
   run_test: {
-    description: `Run the test in a real browser and wait for the result (usually 10-60s). Returns a compact summary: status, the failed step, a short error and a screenshot URL.
+    description: `Run the test in a real browser and wait for the result (usually 10-60s). Choose engine "e2e" (default) or "laya" for Laya Browser Code Mode. Returns a compact summary: status, the failed step, a short error and available evidence URLs.
 Status "error" means the run could not judge the app (model/app unavailable): report it, do not edit steps.
 After a "failed" run: explain the cause in one or two sentences, fix the steps (edit_step or set_steps), and run again. Re-run at most 2 times, then ask the tester.`,
-    input: z.object({}),
+    input: z.object({ engine: ExecutionEngine.optional().describe("Execution engine; defaults to e2e. Choose laya for Laya Browser Code Mode.") }),
   },
   get_run: {
     description: "Get a past run with per-step results.",

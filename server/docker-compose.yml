@@ -6,14 +6,24 @@ services:
     ports:
       - "3000:3000" # API
       - "3002:3002" # demo shop (runs in the same container so tests can open http://localhost:3002)
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
     environment:
       DATA_DIR: /data
+      # OpenCode runs alongside the API in this container so its MCP child process
+      # can execute the same checked-out server code.
+      OPENCODE_BASE_URL: http://127.0.0.1:4096
+      # Keep OpenCode's writable state in the already-persistent /data volume.
+      XDG_DATA_HOME: /data/opencode-home
       # /data holds run screenshots; all other state lives in Postgres.
       DATABASE_URL: postgres://agent:${POSTGRES_PASSWORD:-agent}@db:5432/agent_tester
     volumes:
       - server-data:/data
       - replay-cache:/app/runner/.cache
+      - type: bind
+        source: ${OPENCODE_CONFIG_PATH:-./opencode-config}
+        target: /home/node/.config/opencode
     depends_on:
       db:
         condition: service_healthy

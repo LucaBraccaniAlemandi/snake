@@ -3,13 +3,26 @@ import { useNavigate } from "react-router";
 import { seed } from "./seed";
 import { uid, type Bug, type TestCase, type Workspace } from "./model";
 import { api, fromTest, toRun } from "./api";
-import type { CreateBug, BugStatus } from "../types";
+import type { CreateBug, BugStatus, CreateFolderInput, ExecutionEngine, Folder, UpdateFolderInput } from "../types";
+import { RunExecutionDialog } from "../components/RunExecutionDialog";
+
+function initialWorkspace(): Workspace {
+  const initial = { ...structuredClone(seed), cases: [], folders: [], runs: [], bugs: [] };
+  try {
+    const saved = JSON.parse(localStorage.getItem("agent-tester-ui-state") || "null") as Partial<Pick<Workspace, "preferences" | "conversations">> | null;
+    if (saved) return { ...initial, preferences: { ...initial.preferences, ...saved.preferences }, conversations: saved.conversations ?? [] };
+  } catch { /* Ignore malformed local preferences and recover with defaults. */ }
+  return initial;
+}
 
 type ContextValue = {
   data: Workspace; setData: React.Dispatch<React.SetStateAction<Workspace>>;
   loading: boolean; notify: (message: string) => void; updateCase: (id: string, patch: Partial<TestCase>) => void;
   addCase: (patch: Partial<TestCase>) => Promise<string>; deleteCase: (id: string) => Promise<void>;
-  startRun: (testId: string) => Promise<string | null>;
+  moveCaseToFolder: (id: string, folderId: string | null) => Promise<void>;
+  createFolder: (input: CreateFolderInput) => Promise<Folder>; updateFolder: (id: string, patch: UpdateFolderInput) => Promise<Folder>; deleteFolder: (id: string) => Promise<void>;
+  requestRun: (testId: string) => Promise<void>;
+  startRun: (testId: string, engine: ExecutionEngine, code?: string) => Promise<string | null>;
   refreshWorkspace: () => Promise<void>; refreshBugs: () => Promise<void>; createBug: (runId: string, bug: CreateBug) => Promise<Bug>;
   updateBug: (id: string, patch: { status?: BugStatus; ticket?: string | null }) => Promise<Bug>;
 };
@@ -18,9 +31,10 @@ const WorkspaceContext = createContext<ContextValue | null>(null);
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const startingRuns = useRef(new Set<string>());
-  const [data, setData] = useState<Workspace>(() => ({ ...structuredClone(seed), cases: [], runs: [], bugs: [] }));
+  const [data, setData] = useState<Workspace>(initialWorkspace);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
+  const [pendingRunTestId, setPendingRunTestId] = useState<string | null>(null);
   const [storageError, setStorageError] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const saveTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -30,8 +44,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const notify = useCallback((message: string) => { clearTimeout(toastTimer.current); setToast(message); toastTimer.current = setTimeout(() => setToast(""), 4000); }, []);
 
   const refresh = useCallback(async () => {
-    const [tests, runs, bugs] = await Promise.all([api.listTests(), api.listRuns(), api.listBugs()]);
-    setData((d) => ({ ...d, cases: tests.map(fromTest), runs: runs.map(toRun), bugs }));
+    const [tests, folders, runs, bugs] = await Promise.all([api.listTests(), api.listTestFolders(), api.listRuns(), api.listBugs()]);
+    setData((d) => ({ ...d, cases: tests.map(fromTest), folders, runs: runs.map(toRun), bugs }));
   }, []);
 
   const refreshBugs = useCallback(async () => {
@@ -47,6 +61,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+  useEffect(() => {
+    try { localStorage.setItem("agent-tester-ui-state", JSON.stringify({ preferences: data.preferences, conversations: data.conversations })); }
+    catch { /* UI remains usable when browser storage is unavailable or full. */ }
+  }, [data.preferences, data.conversations]);
 
   // One stream for the workspace: per-test streams exhaust HTTP/1.1's connection pool.
   useEffect(() => {
@@ -119,6 +138,28 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     saveTimers.current.set(id, setTimeout(() => { void flushCase(id).catch(() => undefined); }, 350));
   }, [flushCase]);
 
+  const moveCaseToFolder = useCallback(async (id: string, folderId: string | null) => {
+    updateCase(id, { folderId });
+    await flushCase(id);
+  }, [flushCase, updateCase]);
+
+  const createFolder = useCallback(async (input: CreateFolderInput) => {
+    const folder = await api.createFolder(input);
+    setData((d) => ({ ...d, folders: [...d.folders, folder] }));
+    return folder;
+  }, []);
+
+  const updateFolder = useCallback(async (id: string, patch: UpdateFolderInput) => {
+    const folder = await api.updateFolder(id, patch);
+    setData((d) => ({ ...d, folders: d.folders.map((candidate) => candidate.id === id ? folder : candidate) }));
+    return folder;
+  }, []);
+
+  const deleteFolder = useCallback(async (id: string) => {
+    await api.deleteFolder(id);
+    setData((d) => ({ ...d, folders: d.folders.filter((folder) => folder.id !== id) }));
+  }, []);
+
   // A ref gives the debounce callback the latest full case rather than a stale render.
   useEffect(() => { dataRef.current = data; }, [data]);
 
@@ -156,15 +197,22 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return bug;
   }, []);
 
-  const startRun = useCallback(async (testId: string) => {
+  const requestRun = useCallback(async (testId: string) => {
+    const test = dataRef.current.cases.find((candidate) => candidate.id === testId);
+    if (!test?.steps.length) { notify("Agrega al menos un paso antes de ejecutar."); return; }
+    try { await flushCase(testId); setPendingRunTestId(testId); }
+    catch { /* The storage warning already explains that pending case edits were not saved. */ }
+  }, [flushCase, notify]);
+
+  const startRun = useCallback(async (testId: string, engine: ExecutionEngine, code?: string) => {
     if (startingRuns.current.has(testId)) return null;
     const test = dataRef.current.cases.find((candidate) => candidate.id === testId);
     if (!test?.steps.length) { notify("Agrega al menos un paso antes de ejecutar."); return null; }
     startingRuns.current.add(testId);
-    notify("Iniciando ejecución…");
+    notify(`Iniciando ejecución con ${engine === "e2e" ? "e2e" : "Laya Browser"}…`);
     try {
       await flushCase(testId);
-      const { runId } = await api.startRun(testId);
+      const { runId } = await api.startRun(testId, { engine, ...(code !== undefined ? { code } : {}) });
       const run = toRun(await api.getRun(runId));
       setData((d) => ({ ...d, runs: [run, ...d.runs.filter((old) => old.id !== run.id)] }));
       notify("Ejecución real iniciada en el servidor.");
@@ -188,9 +236,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setData(next);
   };
 
-  return <WorkspaceContext.Provider value={{ data, setData: setWorkspaceData, loading, notify, updateCase, addCase, deleteCase, startRun, refreshWorkspace: refresh, refreshBugs, createBug, updateBug }}>
+  const pendingRun = pendingRunTestId ? data.cases.find(test => test.id === pendingRunTestId) : undefined;
+  const preferredEngine = pendingRun ? data.runs.find(run => run.testId === pendingRun.id)?.engine ?? "e2e" : "e2e";
+
+  return <WorkspaceContext.Provider value={{ data, setData: setWorkspaceData, loading, notify, updateCase, addCase, deleteCase, moveCaseToFolder, createFolder, updateFolder, deleteFolder, requestRun, startRun, refreshWorkspace: refresh, refreshBugs, createBug, updateBug }}>
     {storageError && <div className="storage-warning" role="alert">{storageError}</div>}
-    {children}{toast && <div className="toast" role="status"><span>✓</span>{toast}<button onClick={() => setToast("")} aria-label="Cerrar notificación">×</button></div>}
+    {children}
+    {pendingRun && <RunExecutionDialog test={pendingRun} preferredEngine={preferredEngine} onClose={() => setPendingRunTestId(null)} onStart={async (engine, code) => { const runId = await startRun(pendingRun.id, engine, code); if (runId) setPendingRunTestId(null); }} />}
+    {toast && <div className="toast" role="status"><span>✓</span>{toast}<button onClick={() => setToast("")} aria-label="Cerrar notificación">×</button></div>}
   </WorkspaceContext.Provider>;
 }
 

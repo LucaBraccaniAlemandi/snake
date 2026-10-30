@@ -18,6 +18,8 @@ export type Step = z.infer<typeof Step>;
 // "error" = infra/model-provider problem (e2e exit 3), not a test failure; don't auto-fix it.
 export const RunStatus = z.enum(["queued", "running", "passed", "failed", "error"]);
 export type RunStatus = z.infer<typeof RunStatus>;
+export const ExecutionEngine = z.enum(["e2e", "laya"]);
+export type ExecutionEngine = z.infer<typeof ExecutionEngine>;
 
 export const StepStatus = z.enum(["pending", "running", "passed", "failed", "skipped"]);
 export type StepStatus = z.infer<typeof StepStatus>;
@@ -44,9 +46,23 @@ export const Workspace = z.object({
 });
 export type Workspace = z.infer<typeof Workspace>;
 
+export const FolderKind = z.enum(["test", "cycle"]);
+export type FolderKind = z.infer<typeof FolderKind>;
+export const Folder = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  kind: FolderKind,
+  name: z.string(),
+  parentId: z.string().nullable(),
+  position: z.number().int().nonnegative(),
+  createdAt: z.string(),
+});
+export type Folder = z.infer<typeof Folder>;
+
 export const Test = z.object({
   id: z.string(),
   workspaceId: z.string(),
+  folderId: z.string().nullable(),
   name: z.string(),
   url: z.string().url(),
   script: z.string(),
@@ -88,15 +104,21 @@ export const StepResult = z.object({
 });
 export type StepResult = z.infer<typeof StepResult>;
 
+export const AiModelSnapshot = z.object({ provider: z.string(), model: z.string(), local: z.boolean().default(false) });
+export type AiModelSnapshot = z.infer<typeof AiModelSnapshot>;
+
 export const Run = z.object({
   id: z.string(),
   testId: z.string(),
+  engine: ExecutionEngine.default("e2e"),
   status: RunStatus,
   startedAt: z.string().nullable(),
   finishedAt: z.string().nullable(),
   createdAt: z.string(),
   stepResults: z.array(StepResult),
   testSnapshot: z.object({ name: z.string(), url: z.string(), steps: z.array(Step), metadata: Test.shape.metadata }),
+  aiSnapshot: AiModelSnapshot.optional(),
+  codeSnapshot: z.string().optional(),
   reportPath: z.string().optional(),
 });
 export type Run = z.infer<typeof Run>;
@@ -128,3 +150,16 @@ export const Bug = z.object({
   updatedAt: z.string(),
 });
 export type Bug = z.infer<typeof Bug>;
+
+export const JiraIssue = z.object({
+  id: z.string(), key: z.string(), url: z.string().url(), title: z.string(), description: z.string(),
+  status: z.string(), type: z.string(), priority: z.string(), assignee: z.string(), updatedAt: z.string(), parent: z.string().optional(),
+});
+export type JiraIssue = z.infer<typeof JiraIssue>;
+export const JiraSuggestion = z.object({
+  id: z.string(), title: z.string().min(1), type: z.string().min(1), priority: z.enum(["Alta", "Media", "Baja"]),
+  pre: z.string(), expected: z.string(),
+});
+export type JiraSuggestion = z.infer<typeof JiraSuggestion>;
+export const JiraAnalysis = z.object({ documentation: z.string(), suggestions: z.array(JiraSuggestion).min(1).max(12) });
+export type JiraAnalysis = z.infer<typeof JiraAnalysis>;

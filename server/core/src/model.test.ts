@@ -43,3 +43,38 @@ describe("OpenRouter configuration", () => {
       .toBe("inception/mercury-2.5");
   });
 });
+
+describe("OpenAI-compatible E2E runtime", () => {
+  test("uses the configured endpoint without sending an API key", async () => {
+    let request: { url: string; headers: Headers; body: Record<string, unknown> } | undefined;
+    const transport = (async (url, init) => {
+      request = { url: String(url), headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) };
+      return Response.json({
+        id: "local-test", object: "chat.completion", created: 1, model: "qwen-local",
+        choices: [{ index: 0, message: { role: "assistant", content: "OK" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    }) as typeof fetch;
+    const model = createModel("e2e", { E2E_BASE_URL: "http://127.0.0.1:12345/v1", E2E_MODEL: "qwen-local" }, transport);
+    const result = await model.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "Reply OK" }] }] });
+    expect(request?.url).toBe("http://127.0.0.1:12345/v1/chat/completions");
+    expect(request?.headers.has("authorization")).toBe(false);
+    expect(request?.body.model).toBe("qwen-local");
+    expect(result.content).toContainEqual({ type: "text", text: "OK" });
+  });
+
+  test("sends an explicitly configured key to the compatible endpoint", async () => {
+    const authorization = { value: "" };
+    const transport = (async (_url, init) => {
+      authorization.value = new Headers(init?.headers).get("authorization") || "";
+      return Response.json({
+        id: "local-test", object: "chat.completion", created: 1, model: "remote-model",
+        choices: [{ index: 0, message: { role: "assistant", content: "OK" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    }) as typeof fetch;
+    await createModel("e2e", { E2E_BASE_URL: "https://gateway.example/v1", E2E_API_KEY: "e2e-test-key", E2E_MODEL: "remote-model" }, transport)
+      .doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "Reply OK" }] }] });
+    expect(authorization.value).toBe("Bearer e2e-test-key");
+  });
+});

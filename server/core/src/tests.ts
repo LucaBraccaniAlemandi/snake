@@ -5,27 +5,28 @@ import { BadRequest, NotFound } from "./errors";
 import { publish } from "./events";
 import type { RunStatus, Step, Test, TestListItem } from "./schema";
 import { DEFAULT_WORKSPACE_ID, getWorkspace, removeArtifacts } from "./workspaces";
+import { getFolderForWorkspace } from "./folders";
 
 export { BadRequest, NotFound };
 export type Source = "web" | "chat" | "mcp";
 
-type TestRow = { id: string; workspace_id: string; name: string; url: string; steps: Step[] | string; metadata?: Test["metadata"] | string; updated_at: Date | string };
+type TestRow = { id: string; workspace_id: string; folder_id?: string | null; name: string; url: string; steps: Step[] | string; metadata?: Test["metadata"] | string; updated_at: Date | string };
 const parseJson = <T>(value: T | string | undefined, fallback: T): T => value === undefined ? fallback : typeof value === "string" ? JSON.parse(value) as T : value;
 
 function toTest(row: TestRow): Test {
   const steps = parseJson<Step[]>(row.steps, []);
-  return { id: row.id, workspaceId: row.workspace_id, name: row.name, url: row.url, steps, metadata: parseJson(row.metadata, {}), script: compile({ id: row.id, url: row.url, steps }), updatedAt: iso(row.updated_at)! };
+  return { id: row.id, workspaceId: row.workspace_id, folderId: row.folder_id ?? null, name: row.name, url: row.url, steps, metadata: parseJson(row.metadata, {}), script: compile({ id: row.id, url: row.url, steps }), updatedAt: iso(row.updated_at)! };
 }
 
 export async function listTests(workspaceId = DEFAULT_WORKSPACE_ID): Promise<TestListItem[]> {
   await getWorkspace(workspaceId);
   const rows = await sql`
-    SELECT t.id, t.workspace_id, t.name, t.url, t.steps, t.metadata, t.updated_at,
+    SELECT t.id, t.workspace_id, t.folder_id, t.name, t.url, t.steps, t.metadata, t.updated_at,
       (SELECT status FROM runs r WHERE r.test_id = t.id ORDER BY r.created_at DESC LIMIT 1) AS last_status
     FROM tests t WHERE t.workspace_id = ${workspaceId} ORDER BY t.updated_at DESC`;
   return rows.map((row: any) => {
     const steps = parseJson<Step[]>(row.steps, []);
-    return { id: row.id, workspaceId: row.workspace_id, name: row.name, url: row.url, script: compile({ id: row.id, url: row.url, steps }), steps, metadata: parseJson(row.metadata, {}), lastRunStatus: (row.last_status as RunStatus) ?? null, updatedAt: iso(row.updated_at)! };
+    return { id: row.id, workspaceId: row.workspace_id, folderId: row.folder_id ?? null, name: row.name, url: row.url, script: compile({ id: row.id, url: row.url, steps }), steps, metadata: parseJson(row.metadata, {}), lastRunStatus: (row.last_status as RunStatus) ?? null, updatedAt: iso(row.updated_at)! };
   });
 }
 
@@ -44,11 +45,13 @@ export async function createTest(workspaceId: string, input: { name: string; url
   return toTest(row as TestRow);
 }
 
-export async function updateTest(id: string, patch: { name?: string; url?: string; metadata?: Partial<Test["metadata"]>; steps?: Array<Omit<Step, "id"> & { id?: string }> }, source: Source): Promise<Test> {
+export async function updateTest(id: string, patch: { name?: string; url?: string; folderId?: string | null; metadata?: Partial<Test["metadata"]>; steps?: Array<Omit<Step, "id"> & { id?: string }> }, source: Source): Promise<Test> {
   const current = await getTest(id);
+  if (patch.folderId) await getFolderForWorkspace(current.workspaceId, patch.folderId, "test");
   const metadata = { ...current.metadata, ...patch.metadata };
   const steps = patch.steps?.map((step) => ({ ...step, id: step.id || newId("s") })) ?? current.steps;
   await sql`UPDATE tests SET name = ${patch.name ?? current.name}, url = ${patch.url ?? current.url},
+    folder_id = ${patch.folderId === undefined ? current.folderId : patch.folderId},
     metadata = ${JSON.stringify(metadata)}::jsonb, steps = ${JSON.stringify(steps)}::jsonb, updated_at = now() WHERE id = ${id}`;
   return broadcast(id, source);
 }

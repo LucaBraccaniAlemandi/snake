@@ -74,9 +74,9 @@ export function createServer() {
   );
   server.registerTool(
     "run_test",
-    { description: toolDefs.run_test.description, inputSchema: testId },
-    async ({ testId }) => {
-      const summary = (await api("POST", `/api/tests/${testId}/run?wait=true`)) as { screenshotUrl: string | null };
+    { description: toolDefs.run_test.description, inputSchema: { ...testId, ...toolDefs.run_test.input.shape } },
+    async ({ testId, engine }) => {
+      const summary = (await api("POST", `/api/tests/${testId}/run?wait=true`, engine ? { engine } : {})) as { screenshotUrl: string | null };
       if (summary.screenshotUrl) summary.screenshotUrl = SERVER_URL + summary.screenshotUrl;
       return ok(summary, testId);
     },

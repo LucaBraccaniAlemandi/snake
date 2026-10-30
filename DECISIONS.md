@@ -20,5 +20,5 @@ Small choices made while building. Big ones are in `docs/adr/`, terms in `GLOSSA
 - **MCP activity:** appears only as `test-updated` events with `source: "mcp"`.
 - **Replay Cache:** never cleared manually, because its key already includes each Step's text.
 - **Run queue:** in-process, one Run at a time. `?wait=true` blocks for at most 5 minutes, then kills the process. Asking to run a Test that's already queued or running returns the existing `runId`.
-- **Models:** `CHAT_MODEL` and `E2E_MODEL` both default to `claude-sonnet-5-5`.
+- **Models and runtimes:** Web chat supports Agent Tester/OpenRouter, OpenCode's configured agents/providers, and Claude Agent SDK using `ANTHROPIC_API_KEY`. OpenCode chat can use any model/provider configured in OpenCode without an Agent Tester API key. The E2E runner remains an AI SDK consumer: it uses OpenRouter by default or a configured OpenAI-compatible endpoint (`E2E_BASE_URL`, optional `E2E_API_KEY`) and records that model in each Run snapshot.
 - **Deploy:** Railway, one container (the Playwright image plus Bun). The API serves `client/dist`, the MCP HTTP server runs as a second process, and a volume holds `data/`.

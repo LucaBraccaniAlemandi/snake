@@ -1,5 +1,6 @@
 import { createModel } from "@agent-tester/core/model";
 import { getTest, type Test } from "@agent-tester/core";
+import { claudeChat, openCodeChat, type AiSelection, type AiRuntime } from "./ai";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { convertToModelMessages, jsonSchema, stepCountIs, streamText, tool, type ToolSet, type UIMessage } from "ai";
@@ -64,8 +65,23 @@ async function mcpTools(client: Client, testId?: string): Promise<ToolSet> {
   }));
 }
 
-export async function chat(body: { messages: UIMessage[]; testId?: string; baseUrl?: string }, abortSignal?: AbortSignal): Promise<Response> {
+export async function chat(body: { messages: UIMessage[]; testId?: string; baseUrl?: string; selection?: AiSelection }, abortSignal?: AbortSignal): Promise<Response> {
   const test = body.testId ? await getTest(body.testId) : null;
+  const selection = body.selection ?? { runtime: "native" as const };
+  const runtime: AiRuntime = selection.runtime ?? "native";
+  const prompt = [...body.messages].reverse().find((message) => message.role === "user")?.parts
+    .map((part) => part.type === "text" ? part.text : "").join("\n").trim();
+  if (!prompt) return Response.json({ error: "Escribe un mensaje antes de iniciar el chat." }, { status: 400 });
+  const baseUrl = body.baseUrl?.trim() || "http://localhost:3002";
+  const systemPrompt = system(test, baseUrl);
+  try {
+    if (runtime === "opencode") return await openCodeChat({ selection, prompt, messages: body.messages as any, system: systemPrompt }, abortSignal);
+    if (runtime === "claude") return await claudeChat({ selection, prompt, system: systemPrompt, messages: body.messages as any }, abortSignal);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se pudo iniciar el runtime de IA seleccionado.";
+    return Response.json({ error: message }, { status: 503 });
+  }
+  if (runtime !== "native") return Response.json({ error: `Runtime no soportado: ${runtime}` }, { status: 400 });
   const client = new Client({ name: "agent-tester-chat", version: "0.1.0" });
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -87,7 +103,7 @@ export async function chat(body: { messages: UIMessage[]; testId?: string; baseU
     const tools = await mcpTools(client, test?.id);
     const result = streamText({
       model,
-      system: system(test, body.baseUrl?.trim() || "http://localhost:3002"),
+      system: systemPrompt,
       messages: await convertToModelMessages(body.messages, { tools }),
       tools,
       abortSignal,

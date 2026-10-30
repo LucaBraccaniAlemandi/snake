@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BugSeverity, BugStatus, Step, type Run, type RunStatus, type StepStatus, type Test } from "./schema";
+import { BugSeverity, BugStatus, ExecutionEngine, Step, type Run, type RunStatus, type StepStatus, type Test } from "./schema";
 
 // REST contract served by api, consumed by mcp and the client (client/src/types.ts mirrors it).
 // GET    /api/workspaces                -> Workspace[]
@@ -13,7 +13,8 @@ import { BugSeverity, BugStatus, Step, type Run, type RunStatus, type StepStatus
 // DELETE /api/tests/:id                 -> 204
 // PUT    /api/tests/:id/steps           PutStepsBody -> Test
 // POST   /api/tests/:id/steps/edit      EditStepBody -> Test
-// POST   /api/tests/:id/run[?wait=true] -> 202 { runId } | RunSummary
+// POST   /api/tests/:id/run/preview    { engine: "laya" } -> { code }
+// POST   /api/tests/:id/run[?wait=true] { engine?, code? } -> 202 { runId } | RunSummary
 // GET    /api/runs/:runId               -> Run & { summary }
 // GET    /api/workspaces/:wid/bugs       -> Bug[] ordered by report date DESC
 // GET    /api/bugs/:bugId                 -> Bug
@@ -21,10 +22,25 @@ import { BugSeverity, BugStatus, Step, type Run, type RunStatus, type StepStatus
 // PATCH  /api/bugs/:bugId                 UpdateBugBody -> Bug
 // GET    /api/tests/:id/events          SSE, see TestEvent
 // POST   /api/chat                      { messages, testId } -> AI SDK UI message stream
+// GET    /api/ai/catalog                 -> runtime/agent/model availability, no credentials
 // GET    /artifacts/:runId/failure.png  screenshot of a failed Run
 
 export const WorkspaceBody = z.object({ name: z.string().min(1) });
 export type WorkspaceBody = z.infer<typeof WorkspaceBody>;
+
+export const CreateFolderBody = z.object({
+  kind: z.enum(["test", "cycle"]),
+  name: z.string().trim().min(1).max(200),
+  parentId: z.string().nullable().optional(),
+  position: z.number().int().nonnegative().optional(),
+});
+export type CreateFolderBody = z.infer<typeof CreateFolderBody>;
+export const UpdateFolderBody = z.object({
+  name: z.string().trim().min(1).max(200).optional(),
+  parentId: z.string().nullable().optional(),
+  position: z.number().int().nonnegative().optional(),
+}).refine((value) => Object.keys(value).length > 0, "Provide a folder field to update");
+export type UpdateFolderBody = z.infer<typeof UpdateFolderBody>;
 
 export const TestMetadata = z.object({
   key: z.string().optional(), componentId: z.string().optional(), status: z.string().optional(), priority: z.string().optional(),
@@ -44,7 +60,7 @@ export const EditStepBody = z.object({
 });
 export type EditStepBody = z.infer<typeof EditStepBody>;
 
-export const UpdateTestBody = z.object({ name: z.string().min(1).optional(), url: z.string().url().optional(), metadata: TestMetadata.partial().optional(), steps: PutStepsBody.shape.steps.optional() });
+export const UpdateTestBody = z.object({ name: z.string().min(1).optional(), url: z.string().url().optional(), folderId: z.string().nullable().optional(), metadata: TestMetadata.partial().optional(), steps: PutStepsBody.shape.steps.optional() });
 
 const TicketReference = z.string().trim().max(500).nullable().optional();
 export const CreateBugBody = z.object({
@@ -60,6 +76,10 @@ export type CreateBugBody = z.infer<typeof CreateBugBody>;
 export const UpdateBugBody = z.object({ status: BugStatus.optional(), ticket: TicketReference })
   .refine((value) => value.status !== undefined || value.ticket !== undefined, "Provide a status or ticket to update");
 export type UpdateBugBody = z.infer<typeof UpdateBugBody>;
+
+export const RunPreviewBody = z.object({ engine: ExecutionEngine });
+export const StartRunBody = z.object({ engine: ExecutionEngine.default("e2e"), code: z.string().max(200_000).optional() })
+  .refine((value) => value.engine === "laya" || value.code === undefined, "Custom code is only supported by the Laya engine");
 
 export type ApiError = { error: string };
 

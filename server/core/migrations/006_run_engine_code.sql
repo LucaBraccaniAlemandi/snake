@@ -1,0 +1,5 @@
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS engine TEXT NOT NULL DEFAULT 'e2e';
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS code_snapshot TEXT;
+
+ALTER TABLE runs DROP CONSTRAINT IF EXISTS runs_engine_check;
+ALTER TABLE runs ADD CONSTRAINT runs_engine_check CHECK (engine IN ('e2e', 'laya'));

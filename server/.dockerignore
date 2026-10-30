@@ -5,3 +5,6 @@ runner/.cache
 runner/.runs
 runner/.e2e
 .env
+opencode-data
+opencode-config/*
+!opencode-config/.gitkeep

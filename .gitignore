@@ -8,3 +8,5 @@ data/
 .e2e/
 *.log
 .DS_Store
+server/opencode-config/*
+!server/opencode-config/.gitkeep

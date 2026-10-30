@@ -13,7 +13,8 @@
     "mcp:stdio": "bun mcp/src/stdio.ts",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun test",
-    "start": "concurrently --kill-others -n api,shop -c green,yellow \"bun run --cwd api start\" \"bun run --cwd demo-shop start\""
+    "start": "concurrently --kill-others -n api,shop -c green,yellow \"bun run --cwd api start\" \"bun run --cwd demo-shop start\"",
+    "start:docker": "concurrently --kill-others -n api,shop,opencode -c green,yellow,cyan \"bun run --cwd api start\" \"bun run --cwd demo-shop start\" \"opencode serve --hostname 127.0.0.1 --port 4096\""
   },
   "devDependencies": {
     "bun-types": "1.4.2",

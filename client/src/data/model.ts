@@ -1,7 +1,7 @@
-import type { Run, Step, Test } from "../types";
+import type { ExecutionEngine, Folder, Run, Step, Test } from "../types";
 import type { Bug as ApiBug } from "../types";
 
-// UI-only documentation fields. The REST contract in types.ts remains unchanged.
+// UI-only documentation fields; adapters map them to the shared REST contract.
 export const caseStatuses = ["Publicado", "En revisión", "Borrador", "Deprecado"] as const;
 export const priorities = ["Alta", "Media", "Baja"] as const;
 export type CaseStatus = typeof caseStatuses[number];
@@ -13,13 +13,13 @@ export type TestCase = Omit<Test, "steps" | "metadata"> & {
   notes: string; steps: CaseStep[];
 };
 export type Component = { id: string; name: string; description: string; systems: string[]; actors: string[]; platforms: string[] };
-export type DemoRun = Run & { name: string; testName: string; environment: string; steps: CaseStep[]; demo: boolean };
+export type DemoRun = Run & { engine?: ExecutionEngine; name: string; testName: string; environment: string; steps: CaseStep[]; demo: boolean };
 export type Bug = ApiBug;
 export type ChatActivity = { id: string; name: string; status: "running" | "done" | "error"; detail?: string };
 export type Message = { id: string; role: "user" | "assistant"; content: string; draft?: { name: string; steps: CaseStep[] }; savedCaseId?: string; activities?: ChatActivity[]; streaming?: boolean; error?: boolean };
-export type Conversation = { id: string; title: string; testId: string; messages: Message[]; updatedAt: string };
-export type Preferences = { environment: string; projectName: string; baseUrl: string; provider: string; model: string; repo: string; branch: string; jiraUrl: string; jiraProject: string; chrome: boolean; appium: boolean; mcpUrl: string };
-export type Workspace = { version: 1; components: Component[]; cases: TestCase[]; runs: DemoRun[]; bugs: Bug[]; conversations: Conversation[]; preferences: Preferences };
+export type Conversation = { id: string; title: string; testId: string; messages: Message[]; updatedAt: string; runtime?: "native" | "opencode" | "claude"; agent?: string; model?: string; sessionId?: string };
+export type Preferences = { environment: string; projectName: string; baseUrl: string; provider: string; model: string; runtime: "native" | "opencode" | "claude"; agent: string; aiModel: string; repo: string; branch: string; jiraUrl: string; jiraProject: string; chrome: boolean; appium: boolean; mcpUrl: string };
+export type Workspace = { version: 1; components: Component[]; folders: Folder[]; cases: TestCase[]; runs: DemoRun[]; bugs: Bug[]; conversations: Conversation[]; preferences: Preferences };
 export const uid = () => crypto.randomUUID();
 export const tones: Record<string, string> = { "Publicado": "green", "En revisión": "blue", "Borrador": "neutral", "Deprecado": "pink", "Alta": "red", "Media": "amber", "Baja": "green", "passed": "green", "failed": "red", "running": "blue", "queued": "amber", "error": "red", "Abierto": "red", "En análisis": "blue", "Resuelto": "green", "Cerrado": "neutral", "pending": "neutral", "skipped": "neutral" };
 export const runLabels: Record<string, string> = { passed: "Aprobada", failed: "Fallida", running: "En progreso", queued: "En cola", error: "Interrumpida", pending: "Pendiente", skipped: "Omitido" };
